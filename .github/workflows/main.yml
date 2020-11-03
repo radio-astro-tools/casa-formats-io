@@ -16,6 +16,9 @@ jobs:
             python-version: 3.6
     steps:
     - uses: actions/checkout@v2
+    - name: Set up library dependencies
+      if: ${{ matrix.python-version == '3.6' && matrix.os == 'ubuntu-18.04' }}
+      run: apt update && apt install -y libgfortran3
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
       with:
