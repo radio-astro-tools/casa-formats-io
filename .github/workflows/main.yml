@@ -32,4 +32,4 @@ jobs:
       if: ${{ matrix.python-version == '3.6' && matrix.os == 'ubuntu-16.04' }}
       run: tox -v -e test-casa
     - name: Reporting coverage to codecov
-      run: codecov
+      run: codecov --file .tmp/*/.coverage
