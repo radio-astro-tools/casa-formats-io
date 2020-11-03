@@ -12,7 +12,7 @@ jobs:
         python-version: [3.6, 3.7, 3.8, 3.9]
         include:
           # Build in which CASA can be installed
-          - os: ubuntu-16.04
+          - os: ubuntu-18.04
             python-version: 3.6
     steps:
     - uses: actions/checkout@v2
@@ -29,7 +29,7 @@ jobs:
       if: ${{ matrix.python-version == '3.9' }}
       run: tox -v -e test-dev
     - name: Run tests with CASA
-      if: ${{ matrix.python-version == '3.6' && matrix.os == 'ubuntu-16.04' }}
+      if: ${{ matrix.python-version == '3.6' && matrix.os == 'ubuntu-18.04' }}
       run: tox -v -e test-casa
     - name: Upload coverage to codecov
       uses: codecov/codecov-action@v1.0.13
