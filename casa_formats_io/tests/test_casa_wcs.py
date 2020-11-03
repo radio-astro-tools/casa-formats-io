@@ -12,9 +12,6 @@ from numpy.testing import assert_allclose
 
 from ..casa_low_level_io import getdesc
 from ..casa_wcs import wcs_casa2astropy
-# from ...tests.test_casafuncs import make_casa_testimage
-# from .test_casa_low_level_io import ALL_DATA_FIXTURES
-# from ...conftest import HEADER_FILENAME
 
 HEADER_FILENAME = os.path.join(os.path.dirname(__file__), 'data', 'header_jybeam.hdr')
 
@@ -60,14 +57,6 @@ def assert_header_correct(casa_filename):
             assert actual_header[key] == reference_header[key]
         else:
             assert_allclose(actual_header[key], reference_header[key])
-
-
-# @pytest.mark.skipif('not CASATOOLS_INSTALLED')
-# @pytest.mark.parametrize('filename', ALL_DATA_FIXTURES, indirect=['filename'])
-# def test_wcs_casa2astropy(tmp_path, filename):
-#     casa_filename = str(tmp_path / 'casa.image')
-#     make_casa_testimage(filename, casa_filename)
-#     assert_header_correct(casa_filename)
 
 
 @pytest.mark.skipif('not CASATOOLS_INSTALLED')
@@ -123,17 +112,21 @@ ALL_HEADERS = [
     header_copy_with(CTYPE3='VRAD')
 ]
 
-# @pytest.mark.skipif('not CASATOOLS_INSTALLED')
-# @pytest.mark.parametrize('header', ALL_HEADERS)
-# def test_wcs_casa2astropy_additional(tmp_path, header):
+@pytest.mark.skipif('not CASATOOLS_INSTALLED')
+@pytest.mark.parametrize('header', ALL_HEADERS)
+def test_wcs_casa2astropy_additional(tmp_path, header):
 
-#     # More cases to improve coverage
+    # More cases to improve coverage
 
-#     casa_filename = str(tmp_path / 'casa.image')
-#     fits_filename = str(tmp_path / 'casa.fits')
+    casa_filename = str(tmp_path / 'casa.image')
+    fits_filename = str(tmp_path / 'casa.fits')
 
-#     fits.writeto(fits_filename, np.ones((2, 3, 4, 5)), header)
+    fits.writeto(fits_filename, np.ones((2, 3, 4, 5)), header)
 
-#     make_casa_testimage(fits_filename, casa_filename)
+    ia = image()
+    ia.fromfits(infile=fits_filename, outfile=casa_filename)
+    ia.unlock()
+    ia.close()
+    ia.done()
 
-#     assert_header_correct(casa_filename)
+    assert_header_correct(casa_filename)
