@@ -28,5 +28,5 @@ jobs:
       if: ${{ matrix.python-version == '3.9' }}
       run: tox -v -e test-dev
     - name: Run tests with CASA
-      if: ${{ matrix.python-version == '3.6' && matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.python-version == '3.6' && matrix.os == 'ubuntu-16.04' }}
       run: tox -v -e test-casa
