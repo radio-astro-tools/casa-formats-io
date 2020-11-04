@@ -24,7 +24,7 @@ To construct a dask array backed by a .image dataset, use the
 :func:`~casa_io_formats.image_to_dask` function::
 
     >>> from casa_formats_io.casa_dask import image_to_dask
-    >>> image_to_dask('my_dataset.image/')
+    >>> dask_array = image_to_dask('my_dataset.image/')
     dask.array<CASA Data 6bd6f684-0d21-4614-b953, shape=(2114, 1, 2450, 2450), dtype=float32, chunksize=(14, 1, 350, 2450), chunktype=numpy.ndarray>
 
 Note that rather than use the native CASA chunk size as the size of dask chunks,
