@@ -118,29 +118,6 @@ class CASAArrayWrapper:
                     .reshape(self._chunkshape[::-1], order='F').T[item_in_chunk])
 
 
-def from_array_fast(arrays, asarray=False, lock=False):
-    """
-    This is a more efficient alternative to doing::
-
-        [dask.array.from_array(array) for array in arrays]
-
-    that avoids a lot of the overhead in from_array by using the Array
-    initializer directly.
-    """
-    slices = tuple(slice(0, size) for size in arrays[0].shape)
-    chunk = tuple((size,) for size in arrays[0].shape)
-    meta = np.zeros((0,), dtype=arrays[0].dtype)
-    dask_arrays = []
-    for array in arrays:
-        name1 = str(uuid.uuid4())
-        name2 = str(uuid.uuid4())
-        dsk = {(name1,) + (0,) * array.ndim: (dask.array.core.getter, name2,
-                                              slices, asarray, lock),
-               name2: array}
-        dask_arrays.append(dask.array.Array(dsk, name1, chunk, meta=meta, dtype=array.dtype))
-    return dask_arrays
-
-
 def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
     """
     Read a CASA image (a folder containing a ``table.f0_TSM0`` file) into a
