@@ -172,7 +172,7 @@ def from_array_fast(arrays, asarray=False, lock=False):
 def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
     """
     Read a CASA image (a folder containing a ``table.f0_TSM0`` file) into a
-    numpy array.
+    dask array.
 
     Parameters
     ----------

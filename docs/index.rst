@@ -21,7 +21,7 @@ Using casa-formats-io
 ---------------------
 
 To construct a dask array backed by a .image dataset, use the
-:func:`casa_io_formats.image_to_dask` function::
+:func:`~casa_io_formats.image_to_dask` function::
 
     >>> from casa_formats_io.casa_dask import image_to_dask
     >>> image_to_dask('my_dataset.image/')
@@ -33,8 +33,8 @@ million CASA chunks or more), the `casa_io_formats.image_to_dask` function will
 automatically join neighbouring chunks together on-the-fly which then provides
 significantly better performance.
 
-In addition to :func:`casa_io_formats.image_to_dask`, this package
-implements :func:`casa_formats_io.getdesc` and :func:`casa_formats_io.getdmino`
+In addition to :func:`~casa_io_formats.image_to_dask`, this package
+implements :func:`~casa_formats_io.getdesc` and :func:`~casa_formats_io.getdmino`
 which aim to return the same results as CASA's functions of the same name.
 
 Finally, this package provides :func:`~casa_formats_io.coordsys_to_astropy_wcs`) which can

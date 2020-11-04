@@ -55,7 +55,7 @@ def sanitize_unit(unit):
 
 def coordsys_to_astropy_wcs(coordsys):
     """
-    Convert a casac.coordsys object into an astropy.wcs.WCS object
+    Convert a casac.coordsys object into an :class:`~astropy.wcs.WCS` object
     """
 
     # Rather than try and parse the CASA coordsys ourselves, we delegate
