@@ -5,23 +5,23 @@ Scope
 -----
 
 The **casa-formats-io** package is a small package which implements
-functionality to read data stored in CASA formats (such as .image directories).
+functionality to read data stored in CASA formats (such as .image datasets).
 This implementation is independent of and does not use `casacore
-<https://casacore.github.io/casacore/>`_. The motivations for this package are
+<https://casacore.github.io/casacore/>`_. The motivation for this package is
 to provide:
 
 * Efficient data access via `dask <https://dask.org/>`_ arrays
 * Cross-platform data access, supporting Linux, MacOS X and Windows
 * Data access with all modern Python versions, from 3.6 to the latest Python version
 
-At this time, reading .image datasets is supported. Reading measurement sets
+At this time, only reading .image datasets is supported. Reading measurement sets
 (.ms) or writing data of any kind are not yet supported.
 
 Using casa-formats-io
 ---------------------
 
 To construct a dask array backed by a .image dataset, use the
-`casa_io_formats.casa_image_dask_reader` function::
+:func:`casa_io_formats.casa_image_dask_reader` function::
 
     >>> from casa_formats_io.casa_dask import casa_image_dask_reader
     >>> casa_image_dask_reader('my_dataset.image/')
@@ -33,11 +33,15 @@ million CASA chunks or more), the `casa_io_formats.casa_image_dask_reader` funct
 automatically join neighbouring chunks together on-the-fly which then provides
 significantly better performance.
 
-In addition to `casa_io_formats.casa_image_dask_reader`, this package implements
-:func:`getdesc` which returns the same results as CASA's function of the same name.
+In addition to :func:`casa_io_formats.casa_image_dask_reader`, this package
+implements :func:`casa_formats_io.getdesc` and :func:`casa_formats_io.getdmino`
+which aim to return the same results as CASA's functions of the same name.
 
 Finally, this package provides :func:`~casa_formats_io.wcs_casa2astropy`) which can
 be used to convert CASA WCS infromation to :class:`~astropy.wcs.WCS` objects.
+
+Reference/API
+-------------
 
 .. automodapi:: casa_formats_io
    :no-inheritance-diagram:
