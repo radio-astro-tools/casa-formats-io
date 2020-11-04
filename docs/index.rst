@@ -14,7 +14,7 @@ to provide:
 * Cross-platform data access, supporting Linux, MacOS X and Windows
 * Data access with all modern Python versions, from 3.6 to the latest Python version
 
-At this time, only reading .image datasets is supported. Reading measurement sets
+At this time (November 2020), only reading .image datasets is supported. Reading measurement sets
 (.ms) or writing data of any kind are not yet supported.
 
 Using casa-formats-io
@@ -34,11 +34,11 @@ automatically join neighbouring chunks together on-the-fly which then provides
 significantly better performance.
 
 In addition to :func:`~casa_io_formats.image_to_dask`, this package
-implements :func:`~casa_formats_io.getdesc` and :func:`~casa_formats_io.getdmino`
+implements :func:`~casa_formats_io.getdesc` and :func:`~casa_formats_io.getdminfo`
 which aim to return the same results as CASA's functions of the same name.
 
 Finally, this package provides :func:`~casa_formats_io.coordsys_to_astropy_wcs`) which can
-be used to convert CASA WCS infromation to :class:`~astropy.wcs.WCS` objects.
+be used to convert CASA WCS information to :class:`~astropy.wcs.WCS` objects.
 
 Reference/API
 -------------
