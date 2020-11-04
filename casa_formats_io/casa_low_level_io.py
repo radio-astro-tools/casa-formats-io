@@ -290,9 +290,9 @@ def read_table_desc(f, nrow, image_path):
         name = list(hypercolumn)[0].split('_')[1]
         value = list(hypercolumn.values())[0]
         desc['_define_hypercolumn_'][name] = {'HCcoordnames': value['coord'],
-                                                'HCdatanames': value['data'],
-                                                'HCidnames': value['id'],
-                                                'HCndim': value['ndim']}
+                                              'HCdatanames': value['data'],
+                                              'HCidnames': value['id'],
+                                              'HCndim': value['ndim']}
 
     ncol = read_int32(f)
 
@@ -383,7 +383,8 @@ def read_tiled_st_man(f):
     bucket['CubeShape'] = bucket['CellShape'] = read_iposition(f)
     bucket['TileShape'] = read_iposition(f)
     bucket['ID'] = {}
-    bucket['BucketSize'] = int(total_cube_size / np.product(np.ceil(bucket['CubeShape'] / bucket['TileShape'])))
+    bucket['BucketSize'] = int(total_cube_size /
+                               np.product(np.ceil(bucket['CubeShape'] / bucket['TileShape'])))
 
     unknown = read_int32(f)  # noqa
     unknown = read_int32(f)  # noqa

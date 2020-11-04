@@ -187,9 +187,9 @@ def coordsys_to_astropy_wcs(coordsys):
                 header[f'CDELT{idx}'] = data['wcs']['cdelt']
                 header[f'CUNIT{idx}'] = data['unit']
             header[f'PC{idx}_{idx}'] = 1.0
-            header[f'RESTFRQ'] = data['restfreq']
+            header['RESTFRQ'] = data['restfreq']
             if data['system'] in SPECSYS:
-                header[f'SPECSYS'] = SPECSYS[data['system']]
+                header['SPECSYS'] = SPECSYS[data['system']]
         elif coord_type == 'linear':
             indices = worldmap[index] + 1
             for idx1 in range(len(indices)):

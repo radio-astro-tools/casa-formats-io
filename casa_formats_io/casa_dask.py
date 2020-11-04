@@ -3,7 +3,7 @@
 from __future__ import print_function, absolute_import, division
 
 import os
-from math import ceil, floor
+from math import ceil
 import uuid
 import numpy as np
 
@@ -15,37 +15,7 @@ from ._casa_chunking import _combine_chunks
 __all__ = ['image_to_dask']
 
 
-def combine_chunks(array_1d, shape, oversample):
-    """
-    Given a 1d array of values from a CASA file, which contains ``oversample``
-    chunks (which is a list/tuple of three elements) return a 1d array that
-    would have been returned if there was just one chunk.
-
-    For now, assume that oversample is a tuple of elements in opposite of Numpy
-    order for axes.
-    """
-
-    # NOTE: if this ends up being a bottleneck, it could also be written as a
-    # C/Cython function.
-
-    size = int(np.product(shape))
-    native_shape = [s // o for (s, o) in zip(shape, oversample)]
-    native_size = int(np.product(native_shape))
-
-    # Split 1-d array into native chunks and add to final array
-    result = np.zeros(shape)
-    for i in range(oversample[0]):
-        for j in range(oversample[1]):
-            for k in range(oversample[2]):
-                array_current, array_1d = array_1d[:native_size], array_1d[native_size:]
-                result[i * native_shape[0]:(i+1) * native_shape[0],
-                       j * native_shape[1]:(j+1) * native_shape[1],
-                       k * native_shape[2]:(k+1) * native_shape[2]] = array_current.reshape(native_shape, order='F')
-
-    return result.reshape((size,), order='F')
-
-
-def combine_chunks_c(array_1d, itemsize, shape, oversample):
+def combine_chunks(array_1d, itemsize, shape, oversample):
     if len(shape) == 3:
         shape = tuple(shape) + (1,)
     if len(oversample) == 3:
@@ -66,7 +36,8 @@ class CASAArrayWrapper:
     down.
     """
 
-    def __init__(self, filename, totalshape, chunkshape, chunkoversample=None, dtype=None, itemsize=None, memmap=False):
+    def __init__(self, filename, totalshape, chunkshape, chunkoversample=None,
+                 dtype=None, itemsize=None, memmap=False):
         self._filename = filename
         self._totalshape = totalshape[::-1]
         self._chunkshape = chunkshape[::-1]
@@ -105,8 +76,8 @@ class CASAArrayWrapper:
         for dim in range(self.ndim):
             if isinstance(item[dim], slice):
                 item_in_chunk.append(slice(item[dim].start - indices[dim] * self._chunkshape[dim],
-                                      item[dim].stop - indices[dim] * self._chunkshape[dim],
-                                      item[dim].step))
+                                           item[dim].stop - indices[dim] * self._chunkshape[dim],
+                                           item[dim].step))
             else:
                 item_in_chunk.append(item[dim] - indices[dim] * self._chunkshape[dim])
         item_in_chunk = tuple(item_in_chunk)
@@ -123,9 +94,9 @@ class CASAArrayWrapper:
             else:
                 array_bits = self._array[offset * 8: (offset + self._chunksize) * 8]
 
-            chunk = combine_chunks_c(array_bits, 1,
-                                            shape=self._chunkshape,
-                                            oversample=self._chunkoversample)[:self._chunksize]
+            chunk = combine_chunks(array_bits, 1,
+                                   shape=self._chunkshape,
+                                   oversample=self._chunkoversample)[:self._chunksize]
 
             return chunk.reshape(self._chunkshape[::-1], order='F').T[item_in_chunk].astype(np.bool_)
 
@@ -136,14 +107,15 @@ class CASAArrayWrapper:
                                          offset=offset,
                                          count=self._chunksize * self._itemsize)
             else:
-                data_bytes = self._array[chunk_number*self._chunksize * self._itemsize:(chunk_number+1)*self._chunksize * self._itemsize]
+                data_bytes = self._array[chunk_number*self._chunksize * self._itemsize:
+                                         (chunk_number + 1)*self._chunksize * self._itemsize]
 
-            return (combine_chunks_c(data_bytes,
-                                        self._itemsize,
-                                        shape=self._chunkshape,
-                                        oversample=self._chunkoversample)
-                                    .view(self.dtype)
-                                    .reshape(self._chunkshape[::-1], order='F').T[item_in_chunk])
+            return (combine_chunks(data_bytes,
+                                   self._itemsize,
+                                   shape=self._chunkshape,
+                                   oversample=self._chunkoversample)
+                    .view(self.dtype)
+                    .reshape(self._chunkshape[::-1], order='F').T[item_in_chunk])
 
 
 def from_array_fast(arrays, asarray=False, lock=False):
@@ -294,10 +266,13 @@ def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
     chunkshape = [c * o for (c, o) in zip(chunkshape, chunkoversample)]
 
     # Create a wrapper that takes slices and returns the appropriate CASA data
-    wrapper = CASAArrayWrapper(img_fn, totalshape, chunkshape, chunkoversample=chunkoversample, dtype=dtype, itemsize=itemsize, memmap=memmap)
+    wrapper = CASAArrayWrapper(img_fn, totalshape, chunkshape,
+                               chunkoversample=chunkoversample, dtype=dtype,
+                               itemsize=itemsize, memmap=memmap)
 
     # Convert to a dask array
-    dask_array = dask.array.from_array(wrapper, name='CASA Data ' + str(uuid.uuid4()), chunks=chunkshape[::-1])
+    dask_array = dask.array.from_array(wrapper, name='CASA Data ' + str(uuid.uuid4()),
+                                       chunks=chunkshape[::-1])
 
     # Since the chunks may not divide the array exactly, all the chunks put
     # together may be larger than the array, so we need to get rid of any

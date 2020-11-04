@@ -5,8 +5,8 @@
 #include <numpy/npy_math.h>
 
 /* Define docstrings */
-static char module_docstring[] = "Fast histogram functioins";
-static char _combine_chunks_docstring[] = "Compute a 1D histogram";
+static char module_docstring[] = "Functions to help with CASA chunking";
+static char _combine_chunks_docstring[] = "Combine multiple chunks into a single one";
 
 /* Declare the C functions here. */
 static PyObject *_combine_chunks(PyObject *self, PyObject *args);

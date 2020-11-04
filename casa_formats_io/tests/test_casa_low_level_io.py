@@ -5,7 +5,6 @@ import pytest
 import numpy as np
 from numpy.testing import assert_equal
 from astropy.table import Table
-from astropy.io import fits
 from pprint import pformat
 
 from ..casa_low_level_io import getdminfo, getdesc
