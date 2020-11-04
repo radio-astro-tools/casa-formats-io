@@ -35,7 +35,11 @@ significantly better performance.
 
 In addition to :func:`~casa_io_formats.image_to_dask`, this package
 implements :func:`~casa_formats_io.getdesc` and :func:`~casa_formats_io.getdminfo`
-which aim to return the same results as CASA's functions of the same name.
+which aim to return the same results as CASA's
+`getdesc <https://casadocs.readthedocs.io/en/stable/api/tt/stubs.tools.table.html#stubs.tools.table.getdesc>`__
+and
+`getdminfo <https://casadocs.readthedocs.io/en/stable/api/tt/stubs.tools.table.html#stubs.tools.table.getdminfo>`__
+respectively.
 
 Finally, this package provides :func:`~casa_formats_io.coordsys_to_astropy_wcs`) which can
 be used to convert CASA WCS information to :class:`~astropy.wcs.WCS` objects.
