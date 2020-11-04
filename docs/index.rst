@@ -1,20 +1,44 @@
-.. casa-formats-io documentation master file, created by
-   sphinx-quickstart on Tue Nov  3 23:44:04 2020.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+casa-formats-io documentation
+=============================
 
-Welcome to casa-formats-io's documentation!
-===========================================
+Scope
+-----
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+The **casa-formats-io** package is a small package which implements
+functionality to read data stored in CASA formats (such as .image directories).
+This implementation is independent of and does not use `casacore
+<https://casacore.github.io/casacore/>`_. The motivations for this package are
+to provide:
 
+* Efficient data access via `dask <https://dask.org/>`_ arrays
+* Cross-platform data access, supporting Linux, MacOS X and Windows
+* Data access with all modern Python versions, from 3.6 to the latest Python version
 
+At this time, reading .image datasets is supported. Reading measurement sets
+(.ms) or writing data of any kind are not yet supported.
 
-Indices and tables
-==================
+Using casa-formats-io
+---------------------
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+To construct a dask array backed by a .image dataset, use the
+`casa_io_formats.casa_image_dask_reader` function::
+
+    >>> from casa_formats_io.casa_dask import casa_image_dask_reader
+    >>> casa_image_dask_reader('my_dataset.image/')
+    dask.array<CASA Data 6bd6f684-0d21-4614-b953, shape=(2114, 1, 2450, 2450), dtype=float32, chunksize=(14, 1, 350, 2450), chunktype=numpy.ndarray>
+
+Note that rather than use the native CASA chunk size as the size of dask chunks,
+which is extremely inefficient for large datasets (for which there may be a
+million CASA chunks or more), the `casa_io_formats.casa_image_dask_reader` function will
+automatically join neighbouring chunks together on-the-fly which then provides
+significantly better performance.
+
+In addition to `casa_io_formats.casa_image_dask_reader`, this package implements
+:func:`getdesc` which returns the same results as CASA's function of the same name.
+
+Finally, this package provides :func:`~casa_formats_io.wcs_casa2astropy`) which can
+be used to convert CASA WCS infromation to :class:`~astropy.wcs.WCS` objects.
+
+.. automodapi:: casa_formats_io
+   :no-inheritance-diagram:
+   :inherited-members:
