@@ -7,7 +7,7 @@ import pytest
 import numpy as np
 from numpy.testing import assert_allclose
 
-from ..casa_dask import casa_image_dask_reader
+from ..casa_dask import image_to_dask
 
 try:
     from casatools import image
@@ -28,9 +28,9 @@ SHAPES = [(3, 4, 5), (129, 128, 130), (513, 128, 128), (128, 513, 128),
 
 @pytest.mark.skipif(not CASA_INSTALLED, reason='CASA tests must be run in a CASA environment.')
 @pytest.mark.parametrize(('memmap', 'shape'), product([False, True], SHAPES))
-def test_casa_image_dask_reader(tmpdir, memmap, shape):
+def test_image_to_dask(tmpdir, memmap, shape):
 
-    # Unit tests for the low-level casa_image_dask_reader function which can
+    # Unit tests for the low-level image_to_dask function which can
     # read a CASA image or mask to a Dask array.
 
     reference = np.random.random(shape).astype(np.float32)
@@ -51,7 +51,7 @@ def test_casa_image_dask_reader(tmpdir, memmap, shape):
     ia.fromarray('basic.image', pixels=reference.T, log=False)
     ia.close()
 
-    array1 = casa_image_dask_reader('basic.image', memmap=memmap)
+    array1 = image_to_dask('basic.image', memmap=memmap)
     assert array1.dtype == np.float32
     assert_allclose(array1, reference)
 
@@ -61,7 +61,7 @@ def test_casa_image_dask_reader(tmpdir, memmap, shape):
     # Try and get a mask - this should fail since there isn't one.
 
     with pytest.raises(FileNotFoundError):
-        casa_image_dask_reader('basic.image', mask=True, memmap=memmap)
+        image_to_dask('basic.image', mask=True, memmap=memmap)
 
     # Now create an array with a simple uniform mask.
 
@@ -70,10 +70,10 @@ def test_casa_image_dask_reader(tmpdir, memmap, shape):
     ia.calcmask(mask='T')
     ia.close()
 
-    array2 = casa_image_dask_reader('scalar_mask.image', memmap=memmap)
+    array2 = image_to_dask('scalar_mask.image', memmap=memmap)
     assert_allclose(array2, reference)
 
-    mask2 = casa_image_dask_reader('scalar_mask.image', mask=True, memmap=memmap)
+    mask2 = image_to_dask('scalar_mask.image', mask=True, memmap=memmap)
     assert mask2.dtype is np.dtype('bool')
     assert mask2.shape == array2.shape
     assert np.all(mask2)
@@ -85,10 +85,10 @@ def test_casa_image_dask_reader(tmpdir, memmap, shape):
     ia.calcmask(mask='array_mask.image>0.5')
     ia.close()
 
-    array3 = casa_image_dask_reader('array_mask.image', memmap=memmap)
+    array3 = image_to_dask('array_mask.image', memmap=memmap)
     assert_allclose(array3, reference)
 
-    mask3 = casa_image_dask_reader('array_mask.image', mask=True, memmap=memmap)
+    mask3 = image_to_dask('array_mask.image', mask=True, memmap=memmap)
     assert_allclose(mask3, reference > 0.5)
 
     # Check slicing
@@ -103,19 +103,19 @@ def test_casa_image_dask_reader(tmpdir, memmap, shape):
     ia.calcmask(mask='array_masks.image>0.8', name='gt08')
     ia.close()
 
-    array4 = casa_image_dask_reader('array_masks.image', memmap=memmap)
+    array4 = image_to_dask('array_masks.image', memmap=memmap)
     assert_allclose(array4, reference)
 
-    mask4 = casa_image_dask_reader('array_masks.image', mask=True, memmap=memmap)
+    mask4 = image_to_dask('array_masks.image', mask=True, memmap=memmap)
     assert_allclose(mask4, reference > 0.5)
 
-    mask5 = casa_image_dask_reader('array_masks.image', mask='mask0', memmap=memmap)
+    mask5 = image_to_dask('array_masks.image', mask='mask0', memmap=memmap)
     assert_allclose(mask5, reference > 0.5)
 
-    mask6 = casa_image_dask_reader('array_masks.image', mask='mask1', memmap=memmap)
+    mask6 = image_to_dask('array_masks.image', mask='mask1', memmap=memmap)
     assert_allclose(mask6, reference > 0.2)
 
-    mask7 = casa_image_dask_reader('array_masks.image', mask='gt08', memmap=memmap)
+    mask7 = image_to_dask('array_masks.image', mask='gt08', memmap=memmap)
     assert_allclose(mask7, reference > 0.8)
 
     # Check that things still work if we write the array out with doubles
@@ -126,6 +126,6 @@ def test_casa_image_dask_reader(tmpdir, memmap, shape):
     ia.fromarray('double.image', pixels=reference.T, type='d', log=False)
     ia.close()
 
-    array8 = casa_image_dask_reader('double.image', memmap=memmap)
+    array8 = image_to_dask('double.image', memmap=memmap)
     assert array8.dtype == np.float64
     assert_allclose(array8, reference)

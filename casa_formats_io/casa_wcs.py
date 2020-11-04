@@ -3,7 +3,7 @@ from astropy.wcs import WCS
 from astropy.io import fits
 from astropy.time import Time
 
-__all__ = ['wcs_casa2astropy']
+__all__ = ['coordsys_to_astropy_wcs']
 
 EQUATORIAL_SYSTEMS = ['B1950', 'B1950_VLA', 'J2000', 'ICRS']
 
@@ -53,7 +53,7 @@ def sanitize_unit(unit):
         return unit
 
 
-def wcs_casa2astropy(coordsys):
+def coordsys_to_astropy_wcs(coordsys):
     """
     Convert a casac.coordsys object into an astropy.wcs.WCS object
     """

@@ -21,23 +21,23 @@ Using casa-formats-io
 ---------------------
 
 To construct a dask array backed by a .image dataset, use the
-:func:`casa_io_formats.casa_image_dask_reader` function::
+:func:`casa_io_formats.image_to_dask` function::
 
-    >>> from casa_formats_io.casa_dask import casa_image_dask_reader
-    >>> casa_image_dask_reader('my_dataset.image/')
+    >>> from casa_formats_io.casa_dask import image_to_dask
+    >>> image_to_dask('my_dataset.image/')
     dask.array<CASA Data 6bd6f684-0d21-4614-b953, shape=(2114, 1, 2450, 2450), dtype=float32, chunksize=(14, 1, 350, 2450), chunktype=numpy.ndarray>
 
 Note that rather than use the native CASA chunk size as the size of dask chunks,
 which is extremely inefficient for large datasets (for which there may be a
-million CASA chunks or more), the `casa_io_formats.casa_image_dask_reader` function will
+million CASA chunks or more), the `casa_io_formats.image_to_dask` function will
 automatically join neighbouring chunks together on-the-fly which then provides
 significantly better performance.
 
-In addition to :func:`casa_io_formats.casa_image_dask_reader`, this package
+In addition to :func:`casa_io_formats.image_to_dask`, this package
 implements :func:`casa_formats_io.getdesc` and :func:`casa_formats_io.getdmino`
 which aim to return the same results as CASA's functions of the same name.
 
-Finally, this package provides :func:`~casa_formats_io.wcs_casa2astropy`) which can
+Finally, this package provides :func:`~casa_formats_io.coordsys_to_astropy_wcs`) which can
 be used to convert CASA WCS infromation to :class:`~astropy.wcs.WCS` objects.
 
 Reference/API

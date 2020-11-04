@@ -11,7 +11,7 @@ from astropy.io import fits
 from numpy.testing import assert_allclose
 
 from ..casa_low_level_io import getdesc
-from ..casa_wcs import wcs_casa2astropy
+from ..casa_wcs import coordsys_to_astropy_wcs
 
 HEADER_FILENAME = os.path.join(os.path.dirname(__file__), 'data', 'header_jybeam.hdr')
 
@@ -44,10 +44,10 @@ def assert_header_correct(casa_filename):
     reference_wcs = WCS(fits_filename)
     reference_header = reference_wcs.to_header()
 
-    # Now use our wcs_casa2astropy function to create the header and compare
+    # Now use our coordsys_to_astropy_wcs function to create the header and compare
     # the results.
     desc = getdesc(casa_filename)
-    actual_wcs = wcs_casa2astropy(desc['_keywords_']['coords'])
+    actual_wcs = coordsys_to_astropy_wcs(desc['_keywords_']['coords'])
     actual_header = actual_wcs.to_header()
 
     assert sorted(actual_header) == sorted(reference_header)
@@ -60,7 +60,7 @@ def assert_header_correct(casa_filename):
 
 
 @pytest.mark.skipif('not CASATOOLS_INSTALLED')
-def test_wcs_casa2astropy_linear(tmp_path):
+def test_coordsys_to_astropy_wcs_linear(tmp_path):
 
     # Test that things work properly when the WCS coordinates aren't set
 
@@ -114,7 +114,7 @@ ALL_HEADERS = [
 
 @pytest.mark.skipif('not CASATOOLS_INSTALLED')
 @pytest.mark.parametrize('header', ALL_HEADERS)
-def test_wcs_casa2astropy_additional(tmp_path, header):
+def test_coordsys_to_astropy_wcs_additional(tmp_path, header):
 
     # More cases to improve coverage
 

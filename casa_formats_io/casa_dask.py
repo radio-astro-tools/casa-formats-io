@@ -12,7 +12,7 @@ import dask.array
 from .casa_low_level_io import getdminfo
 from ._casa_chunking import _combine_chunks
 
-__all__ = ['casa_image_dask_reader']
+__all__ = ['image_to_dask']
 
 
 def combine_chunks(array_1d, shape, oversample):
@@ -169,7 +169,7 @@ def from_array_fast(arrays, asarray=False, lock=False):
     return dask_arrays
 
 
-def casa_image_dask_reader(imagename, memmap=True, mask=False, target_chunksize=None):
+def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
     """
     Read a CASA image (a folder containing a ``table.f0_TSM0`` file) into a
     numpy array.
