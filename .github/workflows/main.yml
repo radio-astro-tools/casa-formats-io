@@ -28,11 +28,14 @@ jobs:
     - name: Run tests with latest stable version of dependencies
       if: ${{ matrix.python-version != '3.9' }}
       run: tox -v -e test
+    - name: Run tests with latest developer version of dependencies
+      if: ${{ matrix.python-version == '3.9' }}
+      run: tox -v -e test-devdeps
     - name: Run tests with CASA
       if: ${{ matrix.python-version == '3.6' && matrix.os == 'ubuntu-18.04' }}
       run: tox -v -e test-casa
     - name: Run tests with CASA (and latest developer version of dependencies)
-      if: ${{ matrix.python-version == '3.9' }}
+      if: ${{ matrix.python-version == '3.6' && matrix.os == 'ubuntu-18.04' }}
       run: tox -v -e test-casa-devdeps
     - name: Run tests with CASA (and oldest version of dependencies)
       if: ${{ matrix.python-version == '3.6' && matrix.os == 'ubuntu-18.04' }}
