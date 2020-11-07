@@ -121,7 +121,10 @@ def test_generic_table_read(tmp_path):
     desc_reference = tb.getdesc()
     tb.close()
 
-    assert pformat(desc_actual) == pformat(desc_reference)
+    # Older versions of casatools represent some of the vectors as int32
+    # instead of native int but our implementation uses native int so strip any
+    # mention of int32 from reference output
+    assert pformat(desc_actual) == pformat(desc_reference).replace(', dtype=int32', '')
 
     # TODO: for now the following fails because we haven't implemented
     # non-tiled data I/O
