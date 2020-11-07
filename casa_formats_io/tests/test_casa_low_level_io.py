@@ -47,8 +47,10 @@ def test_getdminfo(tmp_path, shape):
 
     # The easiest way to compare the output is simply to compare the output
     # from pformat (checking for dictionary equality doesn't work because of
-    # the Numpy arrays inside).
-    assert pformat(actual) == pformat(reference)
+    # the Numpy arrays inside). Older versions of casatools represent some of
+    # the vectors as int32 instead of native int but our implementation uses
+    # native int so strip any mention of int32 from reference output
+    assert pformat(actual) == pformat(reference).replace(', dtype=int32', '')
 
 
 def test_getdminfo_large():
