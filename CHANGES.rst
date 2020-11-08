@@ -1,4 +1,4 @@
-0.1 (unreleased)
+0.1 (2020-11-08)
 ----------------
 
 - Initial version which includes ``image_to_dask``, ``getdesc``, ``getdminfo``,
