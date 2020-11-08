@@ -1,3 +1,4 @@
-# casa-formats-io
+casa-formats-io
+---------------
 
-Experimental package implementing I/O for CASA data formats.
+A small package implementing I/O for CASA data formats - see https://casa-formats-io.readthedocs.io for more details.
