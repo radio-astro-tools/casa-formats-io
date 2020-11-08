@@ -29,7 +29,7 @@ To construct a dask array backed by a .image dataset, use the
 
 Note that rather than use the native CASA chunk size as the size of dask chunks,
 which is extremely inefficient for large datasets (for which there may be a
-million CASA chunks or more), the `casa_io_formats.image_to_dask` function will
+million CASA chunks or more), the :func:`casa_io_formats.image_to_dask` function will
 automatically join neighbouring chunks together on-the-fly which then provides
 significantly better performance.
 
