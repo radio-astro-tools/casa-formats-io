@@ -240,7 +240,7 @@ def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
             if finished:
                 break
 
-    chunkshape = [c * o for (c, o) in zip(chunkshape, chunkoversample)]
+        chunkshape = [c * o for (c, o) in zip(chunkshape, chunkoversample)]
 
     # Create a wrapper that takes slices and returns the appropriate CASA data
     wrapper = CASAArrayWrapper(img_fn, totalshape, chunkshape,
