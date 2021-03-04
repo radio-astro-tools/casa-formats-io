@@ -1,6 +1,8 @@
 0.2 (unreleased)
 ----------------
 
+- Reduce default target_chunksize to 1000000. [#11]
+
 - Fix bug that occurred when target_chunksize was smaller than the native
   CASA chunk size. [#10]
 

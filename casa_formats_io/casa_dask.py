@@ -214,10 +214,9 @@ def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
     # CASA chunks are typically too small to be efficient, so we use a larger
     # chunk size for dask and then tell CASAArrayWrapper about both the native
     # and target chunk size.
-    # chunkshape = determine_optimal_chunkshape(totalshape, chunkshape)
 
     if target_chunksize is None:
-        target_chunksize = 10000000
+        target_chunksize = 1000000
 
     if chunksize < target_chunksize:
 

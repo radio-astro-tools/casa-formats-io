@@ -141,10 +141,13 @@ def test_target_chunksize():
     ia.close()
 
     array1 = image_to_dask('large.image')
-    assert array1.chunksize == (256, 256, 256)
+    assert array1.chunksize == (32, 128, 256)
 
     array2 = image_to_dask('large.image', target_chunksize=100000)
     assert array2.chunksize == (32, 32, 128)
 
     array3 = image_to_dask('large.image', target_chunksize=1000)
     assert array3.chunksize == (32, 32, 32)
+
+    array4 = image_to_dask('large.image', target_chunksize=1000000000)
+    assert array4.chunksize == (256, 256, 256)
