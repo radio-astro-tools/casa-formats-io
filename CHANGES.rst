@@ -1,3 +1,9 @@
+0.2 (unreleased)
+----------------
+
+- Fix bug that occurred when target_chunksize was smaller than the native
+  CASA chunk size. [#10]
+
 0.1 (2020-11-08)
 ----------------
 

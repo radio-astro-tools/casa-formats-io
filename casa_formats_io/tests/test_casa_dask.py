@@ -129,3 +129,22 @@ def test_image_to_dask(tmpdir, memmap, shape):
     array8 = image_to_dask('double.image', memmap=memmap)
     assert array8.dtype == np.float64
     assert_allclose(array8, reference)
+
+
+@pytest.mark.skipif(not CASA_INSTALLED, reason='CASA tests must be run in a CASA environment.')
+def test_target_chunksize():
+
+    reference = np.random.random((256, 256, 256))
+
+    ia = image()
+    ia.fromarray('large.image', pixels=reference, log=False)
+    ia.close()
+
+    array1 = image_to_dask('large.image')
+    assert array1.chunksize == (256, 256, 256)
+
+    array2 = image_to_dask('large.image', target_chunksize=100000)
+    assert array2.chunksize == (32, 32, 128)
+
+    array3 = image_to_dask('large.image', target_chunksize=1000)
+    assert array3.chunksize == (32, 32, 32)
