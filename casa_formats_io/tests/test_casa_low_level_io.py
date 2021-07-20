@@ -4,10 +4,10 @@ import os
 import pytest
 import numpy as np
 from numpy.testing import assert_equal
-from astropy.table import Table
+from astropy.table import Table as AstropyTable
 from pprint import pformat
 
-from ..casa_low_level_io import TiledCellStMan, getdminfo, getdesc, EndianAwareFileHandle
+from ..casa_low_level_io import TiledCellStMan, getdminfo, getdesc, EndianAwareFileHandle, Table
 # from ...tests.test_casafuncs import make_casa_testimage
 
 try:
@@ -92,7 +92,7 @@ def test_generic_table_read(tmp_path):
 
     N = 120
 
-    t = Table()
+    t = AstropyTable()
     t['short'] = np.arange(N, dtype=np.int16)
     t['ushort'] = np.arange(N, dtype=np.uint16)
     t['int'] = np.arange(N, dtype=np.int32)
@@ -181,3 +181,9 @@ def test_logtable(tmp_path):
 
     assert pformat(actual_getdesc) == pformat(reference_getdesc)
     assert pformat(actual_getdminfo) == pformat(reference_getdminfo)
+
+    tnew = Table.read(logtable, endian='<')
+
+    tnew.column_set.data_managers[0].read_data()
+
+    assert 1 == 0

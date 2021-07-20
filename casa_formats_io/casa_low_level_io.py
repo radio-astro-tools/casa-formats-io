@@ -201,58 +201,52 @@ class TableRecord(AutoRepr):
 
         check_type_and_version(f, 'TableRecord', 1)
 
-        self.desc = RecordDesc.read(f)
+        desc = RecordDesc.read(f)
 
         unknown = read_int32(f)  # noqa
 
-        self.values = []
+        self.values = {}
 
-        for name, rectype in zip(self.desc.names, self.desc.types):
+        for name, rectype in zip(desc.names, desc.types):
             if rectype == 'bool':
-                self.values.append(read_bool(f))
+                self.values[name] = read_bool(f)
             elif rectype == 'int':
-                self.values.append(int(read_int32(f)))
+                self.values[name] = int(read_int32(f))
             elif rectype == 'uint':
-                self.values.append(int(read_int32(f)))
+                self.values[name] = int(read_int32(f))
             elif rectype == 'float':
-                self.values.append(float(read_float32(f)))
+                self.values[name] = float(read_float32(f))
             elif rectype == 'double':
-                self.values.append(float(read_float64(f)))
+                self.values[name] = float(read_float64(f))
             elif rectype == 'complex':
-                self.values.append(complex(read_complex64(f)))
+                self.values[name] = complex(read_complex64(f))
             elif rectype == 'dcomplex':
-                self.values.append(complex(read_complex128(f)))
+                self.values[name] = complex(read_complex128(f))
             elif rectype == 'string':
-                self.values.append(read_string(f))
+                self.values[name] = read_string(f)
             elif rectype == 'table':
-                self.values.append('Table: ' + os.path.abspath(os.path.join(f.original_filename, read_string(f))))
+                self.values[name] = 'Table: ' + os.path.abspath(os.path.join(f.original_filename, read_string(f)))
             elif rectype == 'arrayint':
-                self.values.append(read_array(f, 'int'))
+                self.values[name] = read_array(f, 'int')
             elif rectype == 'arrayfloat':
-                self.values.append(read_array(f, 'float'))
+                self.values[name] = read_array(f, 'float')
             elif rectype == 'arraydouble':
-                self.values.append(read_array(f, 'double'))
+                self.values[name] = read_array(f, 'double')
             elif rectype == 'arraycomplex':
-                self.values.append(read_array(f, 'complex'))
+                self.values[name] = read_array(f, 'complex')
             elif rectype == 'arraydcomplex':
-                self.values.append(read_array(f, 'dcomplex'))
+                self.values[name] = read_array(f, 'dcomplex')
             elif rectype == 'arraystr':
-                self.values.append(read_array(f, 'string'))
+                self.values[name] = read_array(f, 'string')
             elif rectype == 'record':
-                self.values.append(TableRecord.read(f))
+                self.values[name] = TableRecord.read(f).values
             else:
                 raise NotImplementedError("Support for type {0} in TableRecord not implemented".format(rectype))
 
         return self
 
     def as_dict(self):
-        getdesc_dict = {}
-        for name, value in zip(self.desc.names, self.values):
-            if isinstance(value, TableRecord):
-                getdesc_dict[name] = value.as_dict()
-            else:
-                getdesc_dict[name] = value
-        return getdesc_dict
+        return self.values
 
 
 def check_type_and_version(f, name, versions):
@@ -360,6 +354,7 @@ class StandardStMan(AutoRepr):
         self.name = read_string(f)
         self.column_offset = Block.read(f, read_int32)
         self.column_index_map = Block.read(f, read_int32)
+        self._fileobj = f
         return self
 
     @with_nbytes_prefix
@@ -383,6 +378,55 @@ class StandardStMan(AutoRepr):
         self.last_string_bucket = read_int32(f)
         self.index_length = read_int32(f)
         self.number_indices = read_int32(f)
+
+    def read_data(self):
+
+        # FIXME: for now assume index and data fit into one bucket each
+
+        f = open(self._fileobj.original_filename + '/table.f0', 'rb')
+        f = EndianAwareFileHandle(f, '<', self._fileobj.original_filename)
+
+        # Start of buckets
+        f.seek(512 + 8 + 4)
+
+        # Read in index
+        index = SSMIndex.read(f)
+
+        print(self)
+
+        f.seek(512 + self.idx_bucket_offset + 4)
+
+        index2 = SSMIndex.read(f)
+
+        print(index)
+        print(index2)
+
+
+@with_nbytes_prefix
+def read_mapping(f, key_reader, value_reader):
+    check_type_and_version(f, 'SimpleOrderedMap', 1)
+    read_int32(f)  # ignored
+    nr = read_int32(f)
+    read_int32(f)  # ignored
+    return {key_reader(f): value_reader(f) for i in range(nr)}
+
+
+class SSMIndex(AutoRepr):
+
+    @classmethod
+    @with_nbytes_prefix
+    def read(cls, f):
+        self = cls()
+        check_type_and_version(f, 'SSMIndex', 1)
+        self.n_used = read_int32(f)
+        self.rows_per_bucket = read_int32(f)
+        self.n_columns = read_int32(f)
+        self.free_space = read_mapping(f, read_int32, read_int32)
+
+        self.last_row = Block.read(f, read_int32)
+        self.bucket_number = Block.read(f, read_int32)
+
+        return self
 
 
 class TiledStMan(AutoRepr):
