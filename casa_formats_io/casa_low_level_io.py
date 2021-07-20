@@ -105,14 +105,8 @@ def read_string(f):
 
 @with_nbytes_prefix
 def read_iposition(f):
-
-    stype, sversion = read_type(f)
-
-    if stype != 'IPosition' or sversion != 1:
-        raise NotImplementedError('Support for {0} version {1} not implemented'.format(stype, sversion))
-
+    check_type_and_version(f, 'IPosition', 1)
     nelem = read_int32(f)
-
     return np.array([read_int32(f) for i in range(nelem)], dtype=int)
 
 
@@ -152,16 +146,9 @@ def read_type(f):
 
 @with_nbytes_prefix
 def read_record(f):
-
-    stype, sversion = read_type(f)
-
-    if stype != 'Record' or sversion != 1:
-        raise NotImplementedError('Support for {0} version {1} not implemented'.format(stype, sversion))
-
+    check_type_and_version(f, 'Record', 1)
     RecordDesc.read(f)
-
-    # Not sure what the following value is
-    read_int32(f)
+    read_int32(f)  # Not sure what the following value is
 
 
 class RecordDesc(AutoRepr):
@@ -258,11 +245,11 @@ class TableRecord(AutoRepr):
 
         return self
 
-    def as_getdesc_dict(self):
+    def as_dict(self):
         getdesc_dict = {}
         for name, value in zip(self.desc.names, self.values):
             if isinstance(value, TableRecord):
-                getdesc_dict[name] = value.as_getdesc_dict()
+                getdesc_dict[name] = value.as_dict()
             else:
                 getdesc_dict[name] = value
         return getdesc_dict
@@ -280,8 +267,42 @@ def check_type_and_version(f, name, versions):
 class Table(AutoRepr):
 
     @classmethod
+    def read(cls, filename, endian='>'):
+
+        with open(os.path.join(filename, 'table.dat'), 'rb') as f_orig:
+
+            f = EndianAwareFileHandle(f_orig, '>', filename)
+
+            magic = f.read(4)
+            if magic != b'\xbe\xbe\xbe\xbe':
+                raise ValueError('Incorrect magic code: {0}'.format(magic))
+
+            table = cls.read_fileobj(f)
+
+        if len(table.column_set.data_managers) > 1:
+            raise NotImplementedError("Can't yet deal with tables with more than one data manager")
+
+        dm = table.column_set.data_managers[0]
+
+        f0_filename = os.path.join(filename, 'table.f0')
+
+        if os.path.exists(f0_filename):
+
+            with open(f0_filename, 'rb') as f_orig:
+
+                f = EndianAwareFileHandle(f_orig, endian, filename)
+
+                magic = f.read(4)
+                if magic != b'\xbe\xbe\xbe\xbe':
+                    raise ValueError('Incorrect magic code: {0}'.format(magic))
+
+                dm.read_header(f)
+
+        return table
+
+    @classmethod
     @with_nbytes_prefix
-    def read(cls, f):
+    def read_fileobj(cls, f):
 
         self = cls()
 
@@ -341,73 +362,38 @@ class StandardStMan(AutoRepr):
         self.column_index_map = Block.read(f, read_int32)
         return self
 
-    @staticmethod
     @with_nbytes_prefix
-    def read_header(f):
+    def read_header(self, f):
 
         # SSMBase::readHeader()
         # https://github.com/casacore/casacore/blob/d6da19830fa470bdd8434fd855abe79037fda78c/tables/DataMan/SSMBase.cc#L415
 
         check_type_and_version(f, 'StandardStMan', 3)
 
-        big_endian = f.read(1) == b'\x01'  # noqa
+        self.big_endian = f.read(1) == b'\x01'  # noqa
 
-        header = {}
-
-        header['bucket_size'] = read_int32(f)
-        header['number_of_buckets'] = read_int32(f)
-        header['persistent_cache'] = read_int32(f)
-        header['number_of_free_buckets'] = read_int32(f)
-        header['first_free_bucket'] = read_int32(f)
-        header['number_of_bucket_for_index'] = read_int32(f)
-        header['first_index_bucket_number ']= read_int32(f)
-        header['idx_bucket_offset'] = read_int32(f)
-        header['last_string_bucket'] = read_int32(f)
-        header['index_length'] = read_int32(f)
-        header['number_indices'] = read_int32(f)
-
-        return header
-
-
-class TiledCellStMan(AutoRepr):
-
-    @classmethod
-    def read(cls, f):
-        self = cls()
-        self.name = 'TiledCellStMan'
-        return self
-
-
-    @staticmethod
-    @with_nbytes_prefix
-    def read_header(f):
-
-        # The code in this function corresponds to TiledStMan::headerFileGet
-        # https://github.com/casacore/casacore/blob/75b358be47039250e03e5042210cbc60beaaf6e4/tables/DataMan/TiledStMan.cc#L1086
-
-        check_type_and_version(f, 'TiledCellStMan', 1)
-
-        header = {}
-
-        header['default_tile_shape'] = read_iposition(f)
-
-        header['stman'] = TiledStMan.read(f)
-
-        return header
+        self.bucket_size = read_int32(f)
+        self.number_of_buckets = read_int32(f)
+        self.persistent_cache = read_int32(f)
+        self.number_of_free_buckets = read_int32(f)
+        self.first_free_bucket = read_int32(f)
+        self.number_of_bucket_for_index = read_int32(f)
+        self.first_index_bucket_number = read_int32(f)
+        self.idx_bucket_offset = read_int32(f)
+        self.last_string_bucket = read_int32(f)
+        self.index_length = read_int32(f)
+        self.number_indices = read_int32(f)
 
 
 class TiledStMan(AutoRepr):
 
 
-    @classmethod
     @with_nbytes_prefix
-    def read(cls, f):
-
-        self = cls()
+    def read_header(self, f):
 
         check_type_and_version(f, 'TiledStMan', 2)
 
-        big_endian = f.read(1) == b'\x01'  # noqa
+        self.big_endian = f.read(1) == b'\x01'  # noqa
 
         self.seqnr = read_int32(f)
         if self.seqnr != 0:
@@ -462,7 +448,27 @@ class TiledStMan(AutoRepr):
         unknown = read_int32(f)  # noqa
         unknown = read_int32(f)  # noqa
 
+
+class TiledCellStMan(TiledStMan):
+
+    @classmethod
+    def read(cls, f):
+        self = cls()
+        self.name = 'TiledCellStMan'
         return self
+
+
+    @with_nbytes_prefix
+    def read_header(self, f):
+
+        # The code in this function corresponds to TiledStMan::headerFileGet
+        # https://github.com/casacore/casacore/blob/75b358be47039250e03e5042210cbc60beaaf6e4/tables/DataMan/TiledStMan.cc#L1086
+
+        check_type_and_version(f, 'TiledCellStMan', 1)
+
+        self.default_tile_shape = read_iposition(f)
+
+        super().read_header(f)
 
 
 class Block(AutoRepr):
@@ -599,35 +605,13 @@ class ColumnDesc(AutoRepr):
 
 
 
-def read_tiled_cell_st_man(f):
-
-    default_tile_shape = read_iposition(f)
-
-    st_man = read_tiled_st_man(f)
-
-    st_man['SPEC']['DEFAULTTILESHAPE'] = default_tile_shape
-
-    return {'*1': st_man}
-
-
 def getdminfo(filename, endian='>'):
     """
     Return the same output as CASA's getdminfo() function, namely a dictionary
     with metadata about the .image file, parsed from the ``table.f0`` file.
     """
 
-    with open(os.path.join(filename, 'table.dat'), 'rb') as f_orig:
-
-        f = EndianAwareFileHandle(f_orig, '>', filename)
-
-        magic = f.read(4)
-        if magic != b'\xbe\xbe\xbe\xbe':
-            raise ValueError('Incorrect magic code: {0}'.format(magic))
-
-        table = Table.read(f)
-
-    if len(table.column_set.data_managers) > 1:
-        raise NotImplementedError("Can't yet deal with datasets with more than one data manager")
+    table = Table.read(filename, endian=endian)
 
     colset = table.column_set
     dm = colset.data_managers[0]
@@ -641,49 +625,39 @@ def getdminfo(filename, endian='>'):
         dminfo['SEQNR'] = 0
         dminfo['TYPE'] = 'StandardStMan'
 
-    with open(os.path.join(filename, 'table.f0'), 'rb') as f_orig:
+    dminfo['SPEC'] = {}
 
-        f = EndianAwareFileHandle(f_orig, endian, filename)
+    if isinstance(dm, StandardStMan):
 
-        magic = f.read(4)
-        if magic != b'\xbe\xbe\xbe\xbe':
-            raise ValueError('Incorrect magic code: {0}'.format(magic))
+        dminfo['SPEC']['BUCKETSIZE'] = dm.bucket_size
+        dminfo['SPEC']['IndexLength'] = dm.index_length
+        dminfo['SPEC']['MaxCacheSize'] = dm.persistent_cache  # NOTE: not sure if correct
+        dminfo['SPEC']['PERSCACHESIZE'] = dm.persistent_cache
 
-        header = dm.read_header(f)
+    elif isinstance(dm, TiledCellStMan):
 
-        dminfo['SPEC'] = {}
+        dminfo['SPEC']['DEFAULTTILESHAPE'] = dm.default_tile_shape
+        dminfo['SEQNR'] = dm.seqnr
+        dminfo['SPEC']['SEQNR'] = dm.seqnr
 
-        if isinstance(dm, StandardStMan):
+        dminfo['COLUMNS'] = np.array([dm.column_name], dtype='<U16')
+        dminfo['NAME'] = dm.column_name
 
-            dminfo['SPEC']['BUCKETSIZE'] = header['bucket_size']
-            dminfo['SPEC']['IndexLength'] = header['index_length']
-            dminfo['SPEC']['MaxCacheSize'] = header['persistent_cache']  # NOTE: not sure if correct
-            dminfo['SPEC']['PERSCACHESIZE'] = header['persistent_cache']
-
-        elif isinstance(dm, TiledCellStMan):
-
-            dminfo['SPEC']['DEFAULTTILESHAPE'] = header['default_tile_shape']
-            dminfo['SEQNR'] = header['stman'].seqnr
-            dminfo['SPEC']['SEQNR'] = header['stman'].seqnr
-
-            dminfo['COLUMNS'] = np.array([header['stman'].column_name], dtype='<U16')
-            dminfo['NAME'] = header['stman'].column_name
-
-            dminfo['SPEC']['MAXIMUMCACHESIZE'] = header['stman'].max_cache_size
-            dminfo['SPEC']['MaxCacheSize'] = header['stman'].max_cache_size
+        dminfo['SPEC']['MAXIMUMCACHESIZE'] = dm.max_cache_size
+        dminfo['SPEC']['MaxCacheSize'] = dm.max_cache_size
 
 
-            bucket = dminfo['SPEC']['HYPERCUBES'] = {}
-            bucket = dminfo['SPEC']['HYPERCUBES']['*1'] = {}
+        bucket = dminfo['SPEC']['HYPERCUBES'] = {}
+        bucket = dminfo['SPEC']['HYPERCUBES']['*1'] = {}
 
 
-            bucket['CubeShape'] = bucket['CellShape'] = header['stman'].cube_shape
-            bucket['TileShape'] = header['stman'].tile_shape
-            bucket['ID'] = {}
-            bucket['BucketSize'] = int(header['stman'].total_cube_size /
-                                       np.product(np.ceil(bucket['CubeShape'] / bucket['TileShape'])))
+        bucket['CubeShape'] = bucket['CellShape'] = dm.cube_shape
+        bucket['TileShape'] = dm.tile_shape
+        bucket['ID'] = {}
+        bucket['BucketSize'] = int(dm.total_cube_size /
+                                    np.product(np.ceil(bucket['CubeShape'] / bucket['TileShape'])))
 
-            dminfo['TYPE'] = 'TiledCellStMan'
+        dminfo['TYPE'] = 'TiledCellStMan'
 
     return {'*1': dminfo}
 
@@ -694,28 +668,21 @@ def getdesc(filename, endian='>'):
     with metadata about the .image file, parsed from the ``table.dat`` file.
     """
 
-    with open(os.path.join(filename, 'table.dat'), 'rb') as f_orig:
+    table = Table.read(filename, endian=endian)
 
-        f = EndianAwareFileHandle(f_orig, endian, filename)
+    coldesc = table.desc.column_description
 
-        magic = f.read(4)
-        if magic != b'\xbe\xbe\xbe\xbe':
-            raise ValueError('Incorrect magic code: {0}'.format(magic))
+    desc = {}
+    for column in coldesc:
+        desc[column.name] = {'comment': column.comment,
+                            'dataManagerGroup': table.column_set.data_managers[0].name,
+                            'dataManagerType': column.data_manager_type,
+                            'keywords': column.keywords.as_dict(),
+                            'maxlen': column.maxlen,
+                            'option': column.option,
+                            'valueType': column.value_type}
+    desc['_keywords_'] = table.desc.keywords.as_dict()
+    desc['_private_keywords_'] = table.desc.private_keywords.as_dict()
+    desc['_define_hypercolumn_'] = {}
 
-        result = Table.read(f)
-
-        desc = {}
-        coldesc = result.desc.column_description
-        for column in coldesc:
-            desc[column.name] = {'comment': column.comment,
-                                'dataManagerGroup': result.column_set.data_managers[0].name,
-                                'dataManagerType': column.data_manager_type,
-                                'keywords': column.keywords.as_getdesc_dict(),
-                                'maxlen': column.maxlen,
-                                'option': column.option,
-                                'valueType': column.value_type}
-        desc['_keywords_'] = result.desc.keywords.as_getdesc_dict()
-        desc['_private_keywords_'] = result.desc.private_keywords.as_getdesc_dict()
-        desc['_define_hypercolumn_'] = {}
-
-        return desc
+    return desc

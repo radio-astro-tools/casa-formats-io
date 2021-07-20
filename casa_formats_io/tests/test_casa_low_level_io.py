@@ -5,6 +5,7 @@ import pytest
 import numpy as np
 from numpy.testing import assert_equal
 from astropy.table import Table
+from pprint import pformat
 
 from ..casa_low_level_io import TiledCellStMan, getdminfo, getdesc, EndianAwareFileHandle
 # from ...tests.test_casafuncs import make_casa_testimage
@@ -61,16 +62,17 @@ def test_getdminfo_large():
     with open(os.path.join(filename, 'table.f0'), 'rb') as f_orig:
         f = EndianAwareFileHandle(f_orig, '>', filename)
         magic = f.read(4)
-        lt32bit = TiledCellStMan.read_header(f)
-    assert_equal(lt32bit['stman'].cube_shape, (320, 320, 1, 1920))
+        lt32bit = TiledCellStMan()
+        lt32bit.read_header(f)
+    assert_equal(lt32bit.cube_shape, (320, 320, 1, 1920))
 
     filename = os.path.join(DATA, 'gt32bit.image')
     with open(os.path.join(filename, 'table.f0'), 'rb') as f_orig:
         f = EndianAwareFileHandle(f_orig, '>', filename)
         magic = f.read(4)
-        gt32bit = TiledCellStMan.read_header(f)
-
-    assert_equal(gt32bit['stman'].cube_shape, (640, 640, 1, 1920))
+        gt32bit = TiledCellStMan()
+        gt32bit.read_header(f)
+    assert_equal(gt32bit.cube_shape, (640, 640, 1, 1920))
 
 
 @pytest.fixture
@@ -122,7 +124,7 @@ def test_generic_table_read(tmp_path):
     tb.flush()
     tb.close()
 
-    desc_actual = getdesc(filename_casa)
+    desc_actual = getdesc(filename_casa, endian='<')
 
     tb.open(filename_casa)
     desc_reference = tb.getdesc()
@@ -174,7 +176,7 @@ def test_logtable(tmp_path):
     reference_getdminfo = tb.getdminfo()
     tb.close()
 
-    actual_getdesc = getdesc(logtable)
+    actual_getdesc = getdesc(logtable, endian='<')
     actual_getdminfo = getdminfo(logtable, endian='<')
 
     assert pformat(actual_getdesc) == pformat(reference_getdesc)
