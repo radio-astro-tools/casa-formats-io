@@ -9,6 +9,8 @@ from textwrap import indent
 
 import numpy as np
 
+from astropy.table import Table as AstropyTable
+
 __all__ = ['getdminfo', 'getdesc']
 
 TYPES = ['bool', 'char', 'uchar', 'short', 'ushort', 'int', 'uint', 'float',
@@ -53,19 +55,24 @@ def with_nbytes_prefix(func):
             args = args[2:]
         start = f.tell()
         nbytes = int(read_int32(f))
-        # print('-> calling {0} with {1} bytes starting at {2}'.format(func, nbytes, start))
+        print('-> calling {0} with {1} bytes starting at {2}'.format(func, nbytes, start))
         if nbytes == 0:
             return
-        b = EndianAwareFileHandle(BytesIO(f.read(nbytes - 4)), f.endian, f.original_filename)
+        bytes = f.read(nbytes - 4)
+        if len(bytes) < nbytes - 4:
+            print(nbytes, len(bytes))
+            print(nbytes - 4 - len(bytes))
+            bytes += b'\x00' * (nbytes - 4 - len(bytes))
+        b = EndianAwareFileHandle(BytesIO(bytes), f.endian, f.original_filename)
         if self:
             result = func(self, b, *args)
         else:
             result = func(b, *args)
         end = f.tell()
         # print('-> ended {0} at {1}'.format(func, end))
-        if end - start != nbytes:
-            raise IOError('Function {0} read {1} bytes instead of {2}'
-                          .format(func, end - start, nbytes))
+        # if end - start != nbytes:
+        #     raise IOError('Function {0} read {1} bytes instead of {2}'
+        #                   .format(func, end - start, nbytes))
         return result
     return wrapper
 
@@ -76,6 +83,10 @@ def read_bool(f):
 
 def read_int32(f):
     return np.int32(struct.unpack(f.endian + 'i', f.read(4))[0])
+
+
+def bytes_to_int32(bytes, endian):
+    return np.int32(struct.unpack(endian + 'i', bytes)[0])
 
 
 def read_int64(f):
@@ -258,6 +269,15 @@ def check_type_and_version(f, name, versions):
     return sversion
 
 
+TO_DTYPE = {}
+TO_DTYPE['dcomplex'] = np.dtype('<c16')
+TO_DTYPE['complex'] = np.dtype('<c8')
+TO_DTYPE['double'] = np.dtype('<f8')
+TO_DTYPE['float'] = np.dtype('<f4')
+TO_DTYPE['short'] = np.dtype('<i2')
+TO_DTYPE['int'] = np.dtype('<i4')
+
+
 class Table(AutoRepr):
 
     @classmethod
@@ -292,7 +312,90 @@ class Table(AutoRepr):
 
                 dm.read_header(f)
 
+        table._filename = filename
+        table._f0_filename = f0_filename
+
         return table
+
+    def read_data(self):
+
+        f = open(self._f0_filename, 'rb')
+        f = EndianAwareFileHandle(f, '<', self._filename)
+
+        # As mentioned in read() we only deal with single data managers for now
+        # but once we try and read data that uses multiple data managers, for
+        # each column we can check the data manager to use.
+        dm = self.column_set.data_managers[0]
+
+        print(dm)
+
+        sys.exit(0)
+
+        # Start of buckets
+        # Start off by reading index bucket. For very large tables there may be
+        #  more than one index bucket in which case the code here will need to
+        # be generalised.
+        # if dm.number_of_bucket_for_index > 1:
+        #     raise NotImplementedError("Can't yet read in data with more than one index bucket")
+
+        f.seek(512 + dm.first_index_bucket_number * dm.bucket_size + dm.idx_bucket_offset + 4)
+
+        # FIXME: for some reason with a 'small' generic table we need to add 8 to the
+        # above value for seek()
+
+        index = SSMIndex.read(f)
+
+        print(index)
+
+        # We now loop over columns and read the relevant data from each bucket.
+
+        # We can now loop over the data buckets and set up the table
+        coldesc = self.desc.column_description
+
+        # Variable length strings are stored in their own buckets which we cache
+        # as needed.
+        variable_string_buckets = {}
+
+        t = AstropyTable()
+
+        for colindex in range(len(coldesc)):
+
+            value_type = coldesc[colindex].value_type
+
+            data = []
+
+            for bucket_id in index.bucket_number.elements:
+
+                # Find the starting position of the column in the bucket
+                f.seek(512 + dm.bucket_size * bucket_id + dm.column_offset.elements[colindex])
+
+                if value_type == 'string':
+                    maxlen = coldesc[colindex].maxlen
+                    if maxlen == 0:
+                        for irow in range(index.rows_per_bucket):
+                            bytes = f.read(8)
+                            length = read_int32(f)
+                            if length <= 8:
+                                data.append(bytes[:length])
+                            else:
+                                vs_bucket_id = bytes_to_int32(bytes[:4], '<')
+                                offset = bytes_to_int32(bytes[4:], '<')
+                                if vs_bucket_id not in variable_string_buckets:
+                                    pos = f.tell()
+                                    f.seek(512 + dm.bucket_size * vs_bucket_id + 16)
+                                    variable_string_buckets[vs_bucket_id] = f.read(dm.bucket_size - 16)
+                                    f.seek(pos)
+                                data.append(variable_string_buckets[vs_bucket_id][offset:offset + length])
+                    else:
+                        data.append(np.fromstring(f.read(maxlen * index.rows_per_bucket), dtype=f'S{maxlen}'))
+                elif value_type in TO_DTYPE:
+                    dtype = TO_DTYPE[value_type]
+                    data.append(np.fromstring(f.read(dtype.itemsize * index.rows_per_bucket), dtype=dtype))
+                else:
+                    raise NotImplementedError(f"value type {value_type} not supported yet")
+            t[coldesc[colindex].name] = np.hstack(data)[:index.last_row.elements[-1]]
+        return t
+
 
     @classmethod
     @with_nbytes_prefix
@@ -333,10 +436,14 @@ class TableDesc(AutoRepr):
         self.private_keywords = TableRecord.read(f)
 
         self.ncol = read_int32(f)
+        print('ncol', self.ncol)
 
         self.column_description = []
 
         for icol in range(self.ncol):
+            pos = f.tell()
+            print(icol, repr(f.read(100)))
+            f.seek(pos)
             if icol > 0:
                 read_int32(f)
             self.column_description.append(ColumnDesc.read(f))
@@ -379,36 +486,22 @@ class StandardStMan(AutoRepr):
         self.index_length = read_int32(f)
         self.number_indices = read_int32(f)
 
-    def read_data(self):
-
-        # FIXME: for now assume index and data fit into one bucket each
-
-        f = open(self._fileobj.original_filename + '/table.f0', 'rb')
-        f = EndianAwareFileHandle(f, '<', self._fileobj.original_filename)
-
-        # Start of buckets
-        f.seek(512 + 8 + 4)
-
-        # Read in index
-        index = SSMIndex.read(f)
-
-        print(self)
-
-        f.seek(512 + self.idx_bucket_offset + 4)
-
-        index2 = SSMIndex.read(f)
-
-        print(index)
-        print(index2)
-
 
 @with_nbytes_prefix
 def read_mapping(f, key_reader, value_reader):
     check_type_and_version(f, 'SimpleOrderedMap', 1)
+    pos = f.tell()
+    print('mapping', repr(f.read()))
+    f.seek(pos)
     read_int32(f)  # ignored
     nr = read_int32(f)
     read_int32(f)  # ignored
-    return {key_reader(f): value_reader(f) for i in range(nr)}
+    m = {}
+    for i in range(nr):
+        key = key_reader(f)
+        value = value_reader(f)
+        m[key] = value
+    return m
 
 
 class SSMIndex(AutoRepr):
@@ -425,6 +518,10 @@ class SSMIndex(AutoRepr):
 
         self.last_row = Block.read(f, read_int32)
         self.bucket_number = Block.read(f, read_int32)
+
+        if self.bucket_number.elements == []:
+            self.bucket_number.elements = list(range(self.n_used))
+
 
         return self
 
@@ -605,7 +702,7 @@ class ScalarColumnData(AutoRepr):
 
         self = cls()
 
-        version = read_int32(f)
+        self.version = read_int32(f)
         self.seqnr = read_int32(f)
 
         return self
@@ -617,6 +714,11 @@ class ColumnDesc(AutoRepr):
     def read(cls, f):
 
         self = cls()
+
+        pos = f.tell()
+        print(repr(f.read()))
+        f.seek(pos)
+
 
         unknown = read_int32(f)  # noqa
 

@@ -94,18 +94,18 @@ def test_generic_table_read(tmp_path):
 
     t = AstropyTable()
     t['short'] = np.arange(N, dtype=np.int16)
-    t['ushort'] = np.arange(N, dtype=np.uint16)
-    t['int'] = np.arange(N, dtype=np.int32)
-    t['uint'] = np.arange(N, dtype=np.uint32)
-    t['float'] = np.arange(N, dtype=np.float32)
-    t['double'] = np.arange(N, dtype=np.float64)
-    t['complex'] = np.array([1 + 2j, 3.3 + 8.2j, -1.2 - 4.2j] * (N // 3), dtype=np.complex64)
-    t['dcomplex'] = np.array([3.33 + 4.22j, 3.3 + 8.2j, -1.2 - 4.2j] * (N // 3), dtype=np.complex128)
-    t['str'] = np.array(['reading', 'casa', 'images'] * (N // 3))
+    # t['ushort'] = np.arange(N, dtype=np.uint16)
+    # t['int'] = np.arange(N, dtype=np.int32)
+    # t['uint'] = np.arange(N, dtype=np.uint32)
+    # t['float'] = np.arange(N, dtype=np.float32)
+    # t['double'] = np.arange(N, dtype=np.float64)
+    # t['complex'] = np.array([1 + 2j, 3.3 + 8.2j, -1.2 - 4.2j] * (N // 3), dtype=np.complex64)
+    # t['dcomplex'] = np.array([3.33 + 4.22j, 3.3 + 8.2j, -1.2 - 4.2j] * (N // 3), dtype=np.complex128)
+    # t['str'] = np.array(['reading', 'casa', 'images'] * (N // 3))
 
-    # Repeat this at the end to make sure we correctly finished reading
-    # the complex column metadata
-    t['int2'] = np.arange(N, dtype=np.int32)
+    # # Repeat this at the end to make sure we correctly finished reading
+    # # the complex column metadata
+    # t['int2'] = np.arange(N, dtype=np.int32)
 
     t.write(filename_fits)
 
@@ -143,6 +143,9 @@ def test_generic_table_read(tmp_path):
 
     assert pformat(actual_getdminfo) == pformat(reference_getdminfo)
 
+    tnew = Table.read(filename_casa, endian='<')
+    tnew.read_data()
+
 
 def test_getdesc_floatarray():
 
@@ -167,7 +170,7 @@ def test_logtable(tmp_path):
 
     ia = image()
     ia.fromarray(outfile=filename, pixels=data, log=False)
-    ia.sethistory(origin='test', history=['a', 'bb', 'ccccccccccc'] * 23)
+    ia.sethistory(origin='test', history=['a', 'bb', 'ccccccccccc'] * 3247)
     ia.close()
 
     tb = table()
@@ -184,6 +187,4 @@ def test_logtable(tmp_path):
 
     tnew = Table.read(logtable, endian='<')
 
-    tnew.column_set.data_managers[0].read_data()
-
-    assert 1 == 0
+    tnew.read_data()
