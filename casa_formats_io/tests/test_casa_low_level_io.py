@@ -94,18 +94,18 @@ def test_generic_table_read(tmp_path):
 
     t = AstropyTable()
     t['short'] = np.arange(N, dtype=np.int16)
-    # t['ushort'] = np.arange(N, dtype=np.uint16)
-    # t['int'] = np.arange(N, dtype=np.int32)
-    # t['uint'] = np.arange(N, dtype=np.uint32)
-    # t['float'] = np.arange(N, dtype=np.float32)
-    # t['double'] = np.arange(N, dtype=np.float64)
-    # t['complex'] = np.array([1 + 2j, 3.3 + 8.2j, -1.2 - 4.2j] * (N // 3), dtype=np.complex64)
-    # t['dcomplex'] = np.array([3.33 + 4.22j, 3.3 + 8.2j, -1.2 - 4.2j] * (N // 3), dtype=np.complex128)
-    # t['str'] = np.array(['reading', 'casa', 'images'] * (N // 3))
+    t['ushort'] = np.arange(N, dtype=np.uint16)
+    t['int'] = np.arange(N, dtype=np.int32)
+    t['uint'] = np.arange(N, dtype=np.uint32)
+    t['float'] = np.arange(N, dtype=np.float32)
+    t['double'] = np.arange(N, dtype=np.float64)
+    t['complex'] = np.array([1 + 2j, 3.3 + 8.2j, -1.2 - 4.2j] * (N // 3), dtype=np.complex64)
+    t['dcomplex'] = np.array([3.33 + 4.22j, 3.3 + 8.2j, -1.2 - 4.2j] * (N // 3), dtype=np.complex128)
+    t['str'] = np.array(['reading', 'casa', 'images'] * (N // 3))
 
-    # # Repeat this at the end to make sure we correctly finished reading
-    # # the complex column metadata
-    # t['int2'] = np.arange(N, dtype=np.int32)
+    # Repeat this at the end to make sure we correctly finished reading
+    # the complex column metadata
+    t['int2'] = np.arange(N, dtype=np.int32)
 
     t.write(filename_fits)
 
@@ -188,3 +188,25 @@ def test_logtable(tmp_path):
     tnew = Table.read(logtable, endian='<')
 
     tnew.read_data()
+
+
+@pytest.mark.parametrize('table', ('.',
+                                   'ANTENNA',
+                                   'CALDEVICE',
+                                   'DATA_DESCRIPTION',
+                                   'FEED',
+                                   'FIELD',
+                                   'FLAG_CMD',
+                                   'HISTORY',
+                                   'OBSERVATION',
+                                   'POINTING',
+                                   'POLARIZATION',
+                                   'PROCESSOR',
+                                   'SOURCE',
+                                   'SPECTRAL_WINDOW',
+                                   'STATE',
+                                   'SYSCAL',
+                                   'SYSPOWER'))
+def test_ms_tables(table):
+    t = Table.read(os.path.join(DATA, 'small.ms', table), endian='<')
+    t.read_data()
