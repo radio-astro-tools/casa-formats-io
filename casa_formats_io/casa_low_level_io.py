@@ -332,7 +332,7 @@ class Table(AutoRepr):
 
         return table
 
-    def read_data(self):
+    def read_as_astropy_table(self):
 
         # We now loop over columns and read the relevant data from each bucket.
 
