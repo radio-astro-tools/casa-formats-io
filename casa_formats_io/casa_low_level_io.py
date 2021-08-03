@@ -345,6 +345,8 @@ class Table(AutoRepr):
 
         t = AstropyTable()
 
+        print(self.column_set.columns)
+
         for colindex in range(len(coldesc)):
 
             seqnr = self.column_set.columns[colindex].data.seqnr
@@ -365,6 +367,8 @@ class Table(AutoRepr):
             # if dm.number_of_bucket_for_index > 1:
             #     raise NotImplementedError("Can't yet read in data with more than one index bucket")
 
+            value_type = coldesc[colindex].value_type
+
 
             if isinstance(dm, StandardStMan):
 
@@ -374,7 +378,6 @@ class Table(AutoRepr):
 
                 shape = self.column_set.columns[colindex].data.shape
                 nelements = int(np.product(shape))
-                value_type = coldesc[colindex].value_type
 
                 data = []
 
@@ -413,10 +416,52 @@ class Table(AutoRepr):
                 else:
                     t[coldesc[colindex].name] = []
             elif isinstance(dm, IncrementalStMan):
+
+                # Start off by reading the bucket
                 f.seek(512 + dm.number_of_buckets * dm.bucket_size + 4)
                 index = ISMIndex.read(f)
-                # TODO: Implement data reading
-                warnings.warn(f'Igoring column {coldesc[colindex].name} with data manager {dm.__class__.__name__}')
+
+                n_rows = index.rows.elements[-1]
+
+                if n_rows > 0:
+
+                    # Now move to the data location in the first bucket
+                    # TODO: need to check what happens if the data doesn't fit into one bucket
+                    f.seek(512)
+
+                    # Read in length of data
+                    length = read_int32(f)
+
+                    # Read indices next to find out how many 'change' values there are
+                    f.seek(512 + length)
+                    n_changes = read_int32(f)
+
+                    # Read in the indices
+                    indices = np.frombuffer(f.read(n_changes * 4), dtype='<i4')
+
+                    # Read in the offsets
+                    offsets = np.frombuffer(f.read(n_changes * 4), dtype='<i4')
+
+                    # Now go back and read data
+                    f.seek(516)
+                    if value_type in TO_DTYPE:
+                        dtype = TO_DTYPE[value_type]
+                        values = np.frombuffer(f.read(n_changes * dtype.itemsize), dtype=dtype)
+                    else:
+                        raise NotImplementedError(f"Can't read in data of type {value_type} in IncrementalStMan")
+
+                    # Now expand into full size array
+
+                    # https://github.com/dask/dask/issues/4389
+                    repeats = np.diff(np.hstack([indices, n_rows]))
+                    data = np.repeat(values, repeats)
+
+                    t[coldesc[colindex].name] = data
+
+                else:
+
+                    t[coldesc[colindex].name] = []
+
             else:
                 # TODO: Implement data reading
                 pass
@@ -615,8 +660,8 @@ class TiledStMan(AutoRepr):
         #     raise ValueError("Expected seqnr to be 0, got {0}".format(self.seqnr))
 
         self.nrows = read_int32(f)
-        if self.nrows != 1:
-            raise ValueError("Expected nrows to be 1, got {0}".format(self.nrows))
+        # if self.nrows != 1:
+        #     raise ValueError("Expected nrows to be 1, got {0}".format(self.nrows))
 
         self.ncols = read_int32(f)
         if self.ncols != 1:

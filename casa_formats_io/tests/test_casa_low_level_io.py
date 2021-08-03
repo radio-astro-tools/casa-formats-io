@@ -208,5 +208,8 @@ def test_logtable(tmp_path):
                                    'SYSCAL',
                                    'SYSPOWER'))
 def test_ms_tables(table):
-    t = Table.read(os.path.join(DATA, 'small.ms', table), endian='<')
-    t.read_as_astropy_table()
+    # t = Table.read(os.path.join(DATA, 'small.ms', table), endian='<')
+    # t.read_as_astropy_table()
+    t = Table.read(os.path.join(DATA, 'medium.ms', table), endian='<')
+    tt = t.read_as_astropy_table()
+    print(tt)
