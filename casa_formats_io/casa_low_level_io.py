@@ -93,6 +93,10 @@ def read_bool(f):
     return f.read(1) == b'\x01'
 
 
+def read_int16(f):
+    return np.int16(struct.unpack(f.endian + 'h', f.read(2))[0])
+
+
 def read_int32(f):
     return np.int32(struct.unpack(f.endian + 'i', f.read(4))[0])
 
@@ -427,21 +431,20 @@ class Table(AutoRepr):
                             data.append(np.fromstring(f.read(maxlen * rows_in_bucket[bucket_id]), dtype=f'S{maxlen}'))
                     elif value_type in TO_DTYPE:
                         if coldesc[colindex].is_direct or 'Scalar' in coldesc[colindex].stype:
-                        dtype = TO_DTYPE[value_type]
-                        data.append(np.frombuffer(f.read(dtype.itemsize * rows_in_bucket[bucket_id] * nelements), dtype=dtype).reshape((-1,) + shape))
-                    else:
+                            dtype = TO_DTYPE[value_type]
+                            data.append(np.frombuffer(f.read(dtype.itemsize * rows_in_bucket[bucket_id] * nelements), dtype=dtype).reshape((-1,) + shape))
+                        else:
                             values = []
+                            dtype = TO_DTYPE[value_type]
                             for irow in range(rows_in_bucket[bucket_id]):
                                 offset = read_int64(f)
                                 fi.seek(offset)
                                 ndim = read_int32(fi)
-                                size = read_int32(fi)
-                                if value_type == 'double':
-                                    values.append(read_float64(fi))
-                                elif value_type == 'int':
-                                    values.append(read_int32(fi))
-                                else:
-                                    raise NotImplementedError(f'value_type: {value_type}')
+                                subshape = []
+                                for idim in range(ndim):
+                                    subshape.append(read_int32(fi))
+                                size = int(np.product(subshape))
+                                values.append(np.frombuffer(fi.read(dtype.itemsize * size), dtype=dtype).reshape(subshape[::-1]))
                             data.append(np.array(values))
                     else:
                         raise NotImplementedError(f"value type {value_type} not supported yet")

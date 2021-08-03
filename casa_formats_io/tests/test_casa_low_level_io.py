@@ -232,6 +232,8 @@ def test_ms_tables(tablename):
                 continue
             if tablename == 'CALDEVICE' and colname in ['CAL_EFF', 'TEMPERATURE_LOAD']:
                 continue
+            if tablename == 'SPECTRAL_WINDOW' and colname in ['CHAN_FREQ', 'CHAN_WIDTH', 'EFFECTIVE_BW', 'RESOLUTION', 'ASSOC_SPW_ID', 'ASSOC_NATURE']:
+                continue
 
             # Wrong endian
             if tablename == 'SOURCE' and colname in ['REST_FREQUENCY', 'SYSVEL']:
