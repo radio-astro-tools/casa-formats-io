@@ -246,3 +246,32 @@ def test_ms_tables(tablename):
             assert_equal(tt[colname], tb.getcol(colname).T)
 
         tb.close()
+
+@pytest.mark.openfiles_ignore
+@pytest.mark.skipif('not CASATOOLS_INSTALLED')
+def test_vector_columns(tmp_path):
+
+    # NOTE: for now, this doesn't check that we can read the data - just
+    # the metadata about the table.
+
+    filename_fits = str(tmp_path / 'vector.fits')
+    filename_casa = str(tmp_path / 'vector.image')
+
+    N = 120
+
+    t = AstropyTable()
+    t['short'] = np.arange(N, dtype=np.int16).reshape((5, 4, 3, 2))
+    t['int'] = np.arange(N, dtype=np.int32).reshape((5, 4, 3, 2))
+    t['double'] = np.arange(N, dtype=np.float64).reshape((5, 4, 3, 2))
+    t.write(filename_fits)
+
+    tb = table()
+    tb.fromfits(filename_casa, filename_fits)
+    tb.close()
+
+    tnew = Table.read(filename_casa, endian='<')
+    t2 = tnew.read_as_astropy_table()
+
+    assert_equal(t['short'], t2['short'])
+    assert_equal(t['int'], t2['int'])
+    assert_equal(t['double'], t2['double'])
