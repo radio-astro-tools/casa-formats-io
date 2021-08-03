@@ -239,12 +239,6 @@ def test_ms_tables(tablename):
             if tablename == 'SOURCE' and colname in ['REST_FREQUENCY', 'SYSVEL']:
                 continue
 
-            # Vector column not being read right
-            if tablename == 'CALDEVICE' and colname in ['NOISE_CAL']:
-                continue
-            if tablename == 'FEED' and colname in ['BEAM_OFFSET', 'POL_RESPONSE', 'RECEPTOR_ANGLE']:
-                continue
-
             assert_equal(tt[colname], tb.getcol(colname).T)
 
         tb.close()
