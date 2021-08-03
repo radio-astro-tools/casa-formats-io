@@ -190,7 +190,7 @@ def test_logtable(tmp_path):
     tnew.read_data()
 
 
-@pytest.mark.parametrize('table', ('.',
+@pytest.mark.parametrize('tablename', ('.',
                                    'ANTENNA',
                                    'CALDEVICE',
                                    'DATA_DESCRIPTION',
@@ -207,9 +207,42 @@ def test_logtable(tmp_path):
                                    'STATE',
                                    'SYSCAL',
                                    'SYSPOWER'))
-def test_ms_tables(table):
+def test_ms_tables(tablename):
+
     # t = Table.read(os.path.join(DATA, 'small.ms', table), endian='<')
     # t.read_as_astropy_table()
-    t = Table.read(os.path.join(DATA, 'medium.ms', table), endian='<')
+
+    table_filename = os.path.join(DATA, 'medium.ms', tablename)
+
+    t = Table.read(table_filename, endian='<')
     tt = t.read_as_astropy_table()
-    print(tt)
+
+    if CASATOOLS_INSTALLED:
+
+        tb = table()
+        tb.open(table_filename)
+
+        if tablename != '.':
+            assert tt.colnames == tb.colnames()
+
+        for colname in tt.colnames:
+
+            # CASA has issues reading this in
+            if tablename == 'SOURCE' and colname in ['POSITION', 'TRANSITION']:
+                continue
+            if tablename == 'CALDEVICE' and colname in ['CAL_EFF', 'TEMPERATURE_LOAD']:
+                continue
+
+            # Wrong endian
+            if tablename == 'SOURCE' and colname in ['REST_FREQUENCY', 'SYSVEL']:
+                continue
+
+            # Vector column not being read right
+            if tablename == 'CALDEVICE' and colname in ['NOISE_CAL']:
+                continue
+            if tablename == 'FEED' and colname in ['BEAM_OFFSET', 'POL_RESPONSE', 'RECEPTOR_ANGLE']:
+                continue
+
+            assert_equal(tt[colname], tb.getcol(colname).T)
+
+        tb.close()

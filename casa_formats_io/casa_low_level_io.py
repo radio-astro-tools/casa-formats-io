@@ -345,8 +345,6 @@ class Table(AutoRepr):
 
         t = AstropyTable()
 
-        print(self.column_set.columns)
-
         for colindex in range(len(coldesc)):
 
             seqnr = self.column_set.columns[colindex].data.seqnr
@@ -381,6 +379,10 @@ class Table(AutoRepr):
 
                 data = []
 
+                rows_in_bucket = np.diff(np.hstack([0, np.array(index.last_row.elements) + 1]))
+
+                rows_in_bucket = {key: value for (key, value) in zip(index.bucket_number.elements, rows_in_bucket)}
+
                 for bucket_id in index.bucket_number.elements:
 
                     # Find the starting position of the column in the bucket
@@ -390,11 +392,12 @@ class Table(AutoRepr):
                         # TODO: support shape != None for string columns
                         maxlen = coldesc[colindex].maxlen
                         if maxlen == 0:
-                            for irow in range(index.rows_per_bucket):
+                            subdata = []
+                            for irow in range(rows_in_bucket[bucket_id]):
                                 bytes = f.read(8)
                                 length = read_int32(f)
                                 if length <= 8:
-                                    data.append(bytes[:length])
+                                    subdata.append(bytes[:length])
                                 else:
                                     vs_bucket_id = bytes_to_int32(bytes[:4], '<')
                                     offset = bytes_to_int32(bytes[4:], '<')
@@ -403,16 +406,27 @@ class Table(AutoRepr):
                                         f.seek(512 + dm.bucket_size * vs_bucket_id + 16)
                                         variable_string_buckets[vs_bucket_id] = f.read(dm.bucket_size - 16)
                                         f.seek(pos)
-                                    data.append(variable_string_buckets[vs_bucket_id][offset:offset + length])
+                                    bytes = variable_string_buckets[vs_bucket_id][offset:offset + length]
+                                    if coldesc[colindex].ndim != 0:  # variable length
+                                        n = bytes_to_int32(bytes[4:8], '>')
+                                        strings = []
+                                        pos = 12
+                                        for i in range(n):
+                                            l = bytes_to_int32(bytes[pos:pos + 4], '>')
+                                            strings.append(bytes[pos + 4: pos + 4 + l])
+                                            pos += 4 + l
+                                        bytes = strings
+                                    subdata.append(bytes)
+                            data.append(subdata)
                         else:
-                            data.append(np.fromstring(f.read(maxlen * index.rows_per_bucket), dtype=f'S{maxlen}'))
+                            data.append(np.fromstring(f.read(maxlen * rows_in_bucket[bucket_id]), dtype=f'S{maxlen}'))
                     elif value_type in TO_DTYPE:
                         dtype = TO_DTYPE[value_type]
-                        data.append(np.frombuffer(f.read(dtype.itemsize * index.rows_per_bucket * nelements), dtype=dtype).reshape((-1,) + shape))
+                        data.append(np.frombuffer(f.read(dtype.itemsize * rows_in_bucket[bucket_id] * nelements), dtype=dtype).reshape((-1,) + shape))
                     else:
                         raise NotImplementedError(f"value type {value_type} not supported yet")
                 if data:
-                    t[coldesc[colindex].name] = np.hstack(data)[:index.last_row.elements[-1] + 1]
+                    t[coldesc[colindex].name] = np.hstack(data)
                 else:
                     t[coldesc[colindex].name] = []
             elif isinstance(dm, IncrementalStMan):
