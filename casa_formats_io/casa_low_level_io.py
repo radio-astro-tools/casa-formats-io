@@ -923,7 +923,7 @@ class ColumnDesc(AutoRepr):
         self.option = read_int32(f)
         self.ndim = read_int32(f)
         if self.ndim != 0:
-            self.ipos = read_iposition(f)  # noqa
+            self.shape = read_iposition(f)  # noqa
         self.maxlen = read_int32(f)
         self.keywords = TableRecord.read(f)
 
