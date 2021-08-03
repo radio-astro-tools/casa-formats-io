@@ -933,7 +933,7 @@ class ColumnDesc(AutoRepr):
         else:
             if self.value_type in ('ushort', 'short'):
                 default = f.read(2)
-            if self.value_type in ('uint', 'int', 'float'):
+            elif self.value_type in ('uint', 'int', 'float'):
                 default = f.read(4)
             elif self.value_type in ('double', 'complex'):
                 default = f.read(8)

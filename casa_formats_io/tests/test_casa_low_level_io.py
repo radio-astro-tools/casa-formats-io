@@ -144,7 +144,7 @@ def test_generic_table_read(tmp_path):
     assert pformat(actual_getdminfo) == pformat(reference_getdminfo)
 
     tnew = Table.read(filename_casa, endian='<')
-    tnew.read_data()
+    tnew.read_as_astropy_table()
 
 
 def test_getdesc_floatarray():
@@ -187,7 +187,7 @@ def test_logtable(tmp_path):
 
     tnew = Table.read(logtable, endian='<')
 
-    tnew.read_data()
+    tnew.read_as_astropy_table()
 
 
 @pytest.mark.parametrize('tablename', ('.',
