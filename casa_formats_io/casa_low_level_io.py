@@ -358,6 +358,11 @@ class Table(AutoRepr):
             fx_filename = os.path.join(self._filename, f'table.f{seqnr}')
             f = EndianAwareFileHandle(open(fx_filename, 'rb'), '<', self._filename)
 
+            if os.path.exists(fx_filename + 'i'):
+                fi = EndianAwareFileHandle(open(fx_filename + 'i', 'rb'), '<', self._filename)
+            else:
+                fi = None
+
             # Start of buckets
             # Start off by reading index bucket. For very large tables there may be
             #  more than one index bucket in which case the code here will need to
@@ -421,8 +426,23 @@ class Table(AutoRepr):
                         else:
                             data.append(np.fromstring(f.read(maxlen * rows_in_bucket[bucket_id]), dtype=f'S{maxlen}'))
                     elif value_type in TO_DTYPE:
+                        if coldesc[colindex].is_direct or 'Scalar' in coldesc[colindex].stype:
                         dtype = TO_DTYPE[value_type]
                         data.append(np.frombuffer(f.read(dtype.itemsize * rows_in_bucket[bucket_id] * nelements), dtype=dtype).reshape((-1,) + shape))
+                    else:
+                            values = []
+                            for irow in range(rows_in_bucket[bucket_id]):
+                                offset = read_int64(f)
+                                fi.seek(offset)
+                                ndim = read_int32(fi)
+                                size = read_int32(fi)
+                                if value_type == 'double':
+                                    values.append(read_float64(fi))
+                                elif value_type == 'int':
+                                    values.append(read_int32(fi))
+                                else:
+                                    raise NotImplementedError(f'value_type: {value_type}')
+                            data.append(np.array(values))
                     else:
                         raise NotImplementedError(f"value type {value_type} not supported yet")
                 if data:
@@ -915,12 +935,18 @@ class ColumnDesc(AutoRepr):
 
         # https://github.com/casacore/casacore/blob/dbf28794ef446bbf4e6150653dbe404379a3c429/tables/Tables/BaseColDesc.cc#L285
 
+        self.stype = stype
         self.name = read_string(f)
         self.comment = read_string(f)
         self.data_manager_type = read_string(f).replace('Shape', 'Cell')
         self.data_manager_group = read_string(f)
         self.value_type = TYPES[read_int32(f)]
+
         self.option = read_int32(f)
+        self.is_direct = self.option & 1
+        self.is_undefined = self.option & 2
+        self.is_fixed_shape = self.option & 4
+
         self.ndim = read_int32(f)
         if self.ndim != 0:
             self.shape = read_iposition(f)  # noqa
