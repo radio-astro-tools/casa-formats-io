@@ -206,10 +206,7 @@ def test_logtable(tmp_path):
                                        'SYSPOWER'))
 def test_ms_tables(tablename):
 
-    # t = Table.read(os.path.join(DATA, 'small.ms', table), endian='<')
-    # t.read_as_astropy_table()
-
-    table_filename = os.path.join(DATA, 'medium.ms', tablename)
+    table_filename = os.path.join(DATA, 'simple.ms', tablename)
 
     # Concatenation issue as arrays change shape half way through
     if tablename == 'SYSPOWER':
