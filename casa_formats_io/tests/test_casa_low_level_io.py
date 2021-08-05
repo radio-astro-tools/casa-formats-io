@@ -131,10 +131,7 @@ def test_generic_table_read(tmp_path):
     reference_getdminfo = tb.getdminfo()
     tb.close()
 
-    # Older versions of casatools represent some of the vectors as int32
-    # instead of native int but our implementation uses native int so strip any
-    # mention of int32 from reference output
-    assert pformat(desc_actual) == pformat(desc_reference).replace(', dtype=int32', '')
+    assert pformat(desc_actual) == pformat(desc_reference)
 
     actual_getdminfo = getdminfo(filename_casa, endian='<')
 
@@ -156,7 +153,7 @@ def test_getdesc_floatarray():
 
     desc = getdesc(os.path.join(DATA, 'floatarray.image'))
     trc = desc['_keywords_']['masks']['mask0']['box']['trc']
-    assert trc.dtype == np.float32
+    assert trc.dtype == np.dtype('>f4')
     assert_equal(trc, [512, 512, 1, 100])
 
 
@@ -214,6 +211,10 @@ def test_ms_tables(tablename):
 
     table_filename = os.path.join(DATA, 'medium.ms', tablename)
 
+    # Concatenation issue as arrays change shape half way through
+    if tablename == 'SYSPOWER':
+        pytest.xfail()
+
     t = Table.read(table_filename, endian='<')
     tt = t.read_as_astropy_table()
 
@@ -237,6 +238,10 @@ def test_ms_tables(tablename):
 
             # Wrong endian
             if tablename == 'SOURCE' and colname in ['REST_FREQUENCY', 'SYSVEL']:
+                continue
+
+            # Long string split over two buckets
+            if tablename == 'FLAG_CMD' and colname in ['COMMAND']:
                 continue
 
             assert_equal(tt[colname], tb.getcol(colname).T)

@@ -12,7 +12,7 @@ import numpy as np
 
 from astropy.table import Table as AstropyTable
 
-__all__ = ['getdminfo', 'getdesc']
+__all__ = ['getdminfo', 'getdesc', 'Table']
 
 TYPES = ['bool', 'char', 'uchar', 'short', 'ushort', 'int', 'uint', 'float',
          'double', 'complex', 'dcomplex', 'string', 'table', 'arraybool',
@@ -21,7 +21,9 @@ TYPES = ['bool', 'char', 'uchar', 'short', 'ushort', 'int', 'uint', 'float',
          'arraydcomplex', 'arraystr', 'record', 'other']
 
 
-def peek(f, length):
+def _peek(f, length):
+    # Internal function used for debugging - show the next N bytes (and the
+    # previous 8)
     pos = f.tell()
     f.seek(pos - 8)
     print(repr(f.read(8)), '  ', repr(f.read(length)))
@@ -29,12 +31,13 @@ def peek(f, length):
 
 
 def peek_no_prefix(f, length):
+    # Internal function used for debugging - show the next N bytes
     pos = f.tell()
     print(repr(f.read(length)))
     f.seek(pos)
 
 
-class AutoRepr:
+class BaseCasaObject:
     def __repr__(self):
         from pprint import pformat
         return f'{self.__class__.__name__}' + pformat(self.__dict__)
@@ -69,7 +72,6 @@ def with_nbytes_prefix(func):
             args = args[2:]
         start = f.tell()
         nbytes = int(read_int32(f))
-        # print('-> calling {0} with {1} bytes starting at {2}'.format(func, nbytes, start))
         if nbytes == 0:
             return
         bytes = f.read(nbytes - 4)
@@ -81,12 +83,21 @@ def with_nbytes_prefix(func):
         else:
             result = func(b, *args)
         end = f.tell()
-        # print('-> ended {0} at {1}'.format(func, end))
-        # if end - start != nbytes:
-        #     raise IOError('Function {0} read {1} bytes instead of {2}'
-        #                   .format(func, end - start, nbytes))
+        if end - start != nbytes:
+            raise IOError('Function {0} read {1} bytes instead of {2}'
+                          .format(func, end - start, nbytes))
         return result
     return wrapper
+
+
+
+def check_type_and_version(f, name, versions):
+    if np.isscalar(versions):
+        versions = [versions]
+    stype, sversion = read_type(f)
+    if stype != name or sversion not in versions:
+        raise NotImplementedError('Support for {0} version {1} not implemented'.format(stype, sversion))
+    return sversion
 
 
 def read_bool(f):
@@ -147,23 +158,56 @@ ARRAY_ITEM_READERS = {
 }
 
 
+TO_DTYPE = {}
+TO_DTYPE['dcomplex'] = 'c16'
+TO_DTYPE['complex'] = 'c8'
+TO_DTYPE['double'] = 'f8'
+TO_DTYPE['float'] = 'f4'
+TO_DTYPE['int'] = 'i4'
+TO_DTYPE['uint'] = 'u4'
+TO_DTYPE['short'] = 'i2'
+TO_DTYPE['string'] = '<U16'
+TO_DTYPE['bool'] = 'bool'
+
+TO_TYPEREPR = {}
+TO_TYPEREPR['dcomplex'] = 'void'
+TO_TYPEREPR['double'] = 'double'
+TO_TYPEREPR['float'] = 'float'
+TO_TYPEREPR['int'] = 'Int'
+TO_TYPEREPR['uint'] = 'uInt'
+TO_TYPEREPR['string'] = 'String'
+
+
+def read_as_numpy_array(f, value_type, nelem, shape=None):
+    """
+    Read the next 'nelem' values as a Numpy array
+    """
+    if value_type == 'string':
+        array = np.array([read_string(f) for i in range(nelem)], dtype='<U16')
+    elif value_type == 'bool':
+        array = np.unpackbits(np.frombuffer(f.read(int(np.ceil(nelem / 8)) * 8), dtype='uint8'), bitorder='little').astype(bool)[:nelem]
+    elif value_type in TO_DTYPE:
+        dtype = np.dtype(f.endian + TO_DTYPE[value_type])
+        array = np.frombuffer(f.read(int(nelem * dtype.itemsize)), dtype=dtype)
+    else:
+        raise NotImplementedError(f"Can't read in data of type {value_type}")
+    if shape is not None:
+        array = array.reshape(shape)
+    return array
+
+
 @with_nbytes_prefix
 def read_array(f, arraytype):
 
-    typerepr, reader, dtype = ARRAY_ITEM_READERS[arraytype]
+    typerepr = TO_TYPEREPR[arraytype]
 
-    stype, sversion = read_type(f)
-
-    if stype != f'Array<{typerepr}>' or sversion != 3:
-        raise NotImplementedError('Support for {0} version {1} not implemented'.format(stype, sversion))
+    check_type_and_version(f, f'Array<{typerepr}>', 3)
 
     ndim = read_int32(f)
     shape = [read_int32(f) for i in range(ndim)]
     size = read_int32(f)
 
-    values = [reader(f) for i in range(size)]
-
-    return np.array(values, dtype=dtype).reshape(shape)
+    return read_as_numpy_array(f, arraytype, size, shape=shape)
 
 
 def read_type(f):
@@ -172,14 +216,18 @@ def read_type(f):
     return tp, version
 
 
-@with_nbytes_prefix
-def read_record(f):
-    check_type_and_version(f, 'Record', 1)
-    RecordDesc.read(f)
-    read_int32(f)  # Not sure what the following value is
+class Record(BaseCasaObject):
+
+    @classmethod
+    @with_nbytes_prefix
+    def read(cls, f):
+        self = cls()
+        check_type_and_version(f, 'Record', 1)
+        self.desc = RecordDesc.read(f)
+        read_int32(f)  # Not sure what the following value is
 
 
-class RecordDesc(AutoRepr):
+class RecordDesc(BaseCasaObject):
 
     @classmethod
     @with_nbytes_prefix
@@ -219,7 +267,7 @@ class RecordDesc(AutoRepr):
 
 
 
-class TableRecord(AutoRepr):
+class TableRecord(BaseCasaObject):
 
     @classmethod
     @with_nbytes_prefix
@@ -279,29 +327,10 @@ class TableRecord(AutoRepr):
         return self.values
 
 
-def check_type_and_version(f, name, versions):
-    if np.isscalar(versions):
-        versions = [versions]
-    stype, sversion = read_type(f)
-    if stype != name or sversion not in versions:
-        raise NotImplementedError('Support for {0} version {1} not implemented'.format(stype, sversion))
-    return sversion
-
-
-TO_DTYPE = {}
-TO_DTYPE['dcomplex'] = np.dtype('<c16')
-TO_DTYPE['complex'] = np.dtype('<c8')
-TO_DTYPE['double'] = np.dtype('<f8')
-TO_DTYPE['float'] = np.dtype('<f4')
-TO_DTYPE['short'] = np.dtype('<i2')
-TO_DTYPE['int'] = np.dtype('<i4')
-TO_DTYPE['bool'] = np.dtype('bool')
-
-
-class Table(AutoRepr):
+class Table(BaseCasaObject):
 
     @classmethod
-    def read(cls, filename, endian='>'):
+    def read(cls, filename, endian='<'):
 
         with open(os.path.join(filename, 'table.dat'), 'rb') as f_orig:
 
@@ -340,7 +369,10 @@ class Table(AutoRepr):
 
         # We now loop over columns and read the relevant data from each bucket.
 
-        # We can now loop over the data buckets and set up the table
+        # TODO: refactor this to make it so that columns are read on request
+        # instead of all in one go. The best way to do this might be to make a
+        # table where each column is a dask array.
+
         coldesc = self.desc.column_description
 
         # Variable length strings are stored in their own buckets which we cache
@@ -351,37 +383,41 @@ class Table(AutoRepr):
 
         for colindex in range(len(coldesc)):
 
+            # Find the data manager to use for the column as well as the
+            # 'sequence number' - this is the value in e.g. table.f<seqnr>
             seqnr = self.column_set.columns[colindex].data.seqnr
             dm = self.column_set.data_managers[seqnr]
 
+            # Each data manager might only handle one or a few of the columns.
+            # It may internally have a list of the columns it deals with, so
+            # we need to figure out what the column index is in that specific
+            # data manager
             colindex_in_dm = 0
             for column in self.column_set.columns[:colindex]:
                 if column.data.seqnr == seqnr:
                     colindex_in_dm += 1
 
+            # Open the main file corresponding to the data manager
             fx_filename = os.path.join(self._filename, f'table.f{seqnr}')
             f = EndianAwareFileHandle(open(fx_filename, 'rb'), '<', self._filename)
 
+            # Open indirect array file if needed (sometimes arrays are stored
+            # in these files).
             if os.path.exists(fx_filename + 'i'):
                 fi = EndianAwareFileHandle(open(fx_filename + 'i', 'rb'), '<', self._filename)
             else:
                 fi = None
 
-            # Start of buckets
-            # Start off by reading index bucket. For very large tables there may be
-            #  more than one index bucket in which case the code here will need to
-            # be generalised.
-            # if dm.number_of_bucket_for_index > 1:
-            #     raise NotImplementedError("Can't yet read in data with more than one index bucket")
-
             value_type = coldesc[colindex].value_type
-
+            colname = coldesc[colindex].name
 
             if isinstance(dm, StandardStMan):
 
                 f.seek(512 + dm.first_index_bucket_number * dm.bucket_size + dm.idx_bucket_offset + 4)
 
                 index = SSMIndex.read(f)
+                if colname == 'APPLIED':
+                    print(index)
 
                 shape = self.column_set.columns[colindex].data.shape
                 nelements = int(np.product(shape))
@@ -415,9 +451,12 @@ class Table(AutoRepr):
                                         f.seek(512 + dm.bucket_size * vs_bucket_id + 16)
                                         variable_string_buckets[vs_bucket_id] = f.read(dm.bucket_size - 16)
                                         f.seek(pos)
+                                        if colname == 'COMMAND':
+                                            print(vs_bucket_id, variable_string_buckets[vs_bucket_id])
                                     bytes = variable_string_buckets[vs_bucket_id][offset:offset + length]
                                     if coldesc[colindex].ndim != 0:  # variable length
                                         n = bytes_to_int32(bytes[4:8], '>')
+                                        print('n', n)
                                         strings = []
                                         pos = 12
                                         for i in range(n):
@@ -425,17 +464,17 @@ class Table(AutoRepr):
                                             strings.append(bytes[pos + 4: pos + 4 + l])
                                             pos += 4 + l
                                         bytes = strings
+                                        print('bytes', strings)
                                     subdata.append(bytes)
-                            data.append(subdata)
+                            data.append(np.array(subdata))
                         else:
+                            print('ICI')
                             data.append(np.fromstring(f.read(maxlen * rows_in_bucket[bucket_id]), dtype=f'S{maxlen}'))
-                    elif value_type in TO_DTYPE:
+                    else:
                         if coldesc[colindex].is_direct or 'Scalar' in coldesc[colindex].stype:
-                            dtype = TO_DTYPE[value_type]
-                            data.append(np.frombuffer(f.read(dtype.itemsize * rows_in_bucket[bucket_id] * nelements), dtype=dtype).reshape((-1,) + shape))
+                            data.append(read_as_numpy_array(f, value_type, rows_in_bucket[bucket_id] * nelements, shape=(-1,) + shape))
                         else:
                             values = []
-                            dtype = TO_DTYPE[value_type]
                             for irow in range(rows_in_bucket[bucket_id]):
                                 offset = read_int64(f)
                                 fi.seek(offset)
@@ -444,14 +483,22 @@ class Table(AutoRepr):
                                 for idim in range(ndim):
                                     subshape.append(read_int32(fi))
                                 size = int(np.product(subshape))
-                                values.append(np.frombuffer(fi.read(dtype.itemsize * size), dtype=dtype).reshape(subshape[::-1]))
+                                values.append(read_as_numpy_array(fi, value_type, size, shape=subshape[::-1]))
                             data.append(np.array(values))
-                    else:
-                        raise NotImplementedError(f"value type {value_type} not supported yet")
                 if data:
-                    t[coldesc[colindex].name] = np.hstack(data)
+                    if colname == 'APP_PARAMS':
+                        print("HEY")
+                        print(data)
+
+                    if data[0].ndim > 1:
+                        # print('=' * 32)
+                        # for item in data:
+                        #     print(colname, item.shape)
+                        t[colname] = np.vstack(data)
+                    else:
+                        t[colname] = np.hstack(data)
                 else:
-                    t[coldesc[colindex].name] = []
+                    t[colname] = np.array([], dtype=TO_DTYPE[value_type])
             elif isinstance(dm, IncrementalStMan):
 
                 # Start off by reading the bucket
@@ -481,11 +528,7 @@ class Table(AutoRepr):
 
                     # Now go back and read data
                     f.seek(516)
-                    if value_type in TO_DTYPE:
-                        dtype = TO_DTYPE[value_type]
-                        values = np.frombuffer(f.read(n_changes * dtype.itemsize), dtype=dtype)
-                    else:
-                        raise NotImplementedError(f"Can't read in data of type {value_type} in IncrementalStMan")
+                    values = read_as_numpy_array(f, value_type, n_changes)
 
                     # Now expand into full size array
 
@@ -493,11 +536,11 @@ class Table(AutoRepr):
                     repeats = np.diff(np.hstack([indices, n_rows]))
                     data = np.repeat(values, repeats)
 
-                    t[coldesc[colindex].name] = data
+                    t[colname] = data
 
                 else:
 
-                    t[coldesc[colindex].name] = []
+                    t[colname] = np.array([], dtype=TO_DTYPE[value_type])
 
             else:
                 # TODO: Implement data reading
@@ -526,7 +569,7 @@ class Table(AutoRepr):
         return self
 
 
-class TableDesc(AutoRepr):
+class TableDesc(BaseCasaObject):
 
     @classmethod
     @with_nbytes_prefix
@@ -553,7 +596,7 @@ class TableDesc(AutoRepr):
         return self
 
 
-class StandardStMan(AutoRepr):
+class StandardStMan(BaseCasaObject):
 
     @classmethod
     @with_nbytes_prefix
@@ -594,7 +637,7 @@ class StandardStMan(AutoRepr):
 
 
 
-class IncrementalStMan(AutoRepr):
+class IncrementalStMan(BaseCasaObject):
 
     @classmethod
     @with_nbytes_prefix
@@ -643,7 +686,7 @@ def read_mapping(f, key_reader, value_reader):
     return m
 
 
-class SSMIndex(AutoRepr):
+class SSMIndex(BaseCasaObject):
 
     @classmethod
     @with_nbytes_prefix
@@ -664,7 +707,7 @@ class SSMIndex(AutoRepr):
         return self
 
 
-class ISMIndex(AutoRepr):
+class ISMIndex(BaseCasaObject):
 
     # https://github.com/casacore/casacore/blob/dbf28794ef446bbf4e6150653dbe404379a3c429/tables/DataMan/ISMIndex.cc#L51s
 
@@ -682,7 +725,7 @@ class ISMIndex(AutoRepr):
         return self
 
 
-class TiledStMan(AutoRepr):
+class TiledStMan(BaseCasaObject):
 
 
     @with_nbytes_prefix
@@ -733,7 +776,7 @@ class TiledStMan(AutoRepr):
         unknown = read_int32(f)  # 1
         unknown = read_int32(f)  # 1
 
-        read_record(f)
+        Record.read(f)
 
         flag = f.read(1)  # noqa
 
@@ -796,7 +839,7 @@ class TiledColumnStMan(TiledStMan):
         super().read_header(f)
 
 
-class Block(AutoRepr):
+class Block(BaseCasaObject):
 
     @classmethod
     def read(cls, f, func):
@@ -809,7 +852,7 @@ class Block(AutoRepr):
         return self
 
 
-class ColumnSet(AutoRepr):
+class ColumnSet(BaseCasaObject):
 
     @classmethod
     def read(cls, f, desc):
@@ -866,7 +909,7 @@ class ColumnSet(AutoRepr):
         return self
 
 
-class PlainColumn(AutoRepr):
+class PlainColumn(BaseCasaObject):
 
     @classmethod
     def read(cls, f, ndim):
@@ -888,7 +931,7 @@ class PlainColumn(AutoRepr):
         return self
 
 
-class ArrayColumnData(AutoRepr):
+class ArrayColumnData(BaseCasaObject):
 
     @classmethod
     def read(cls, f):
@@ -908,7 +951,7 @@ class ArrayColumnData(AutoRepr):
         return self
 
 
-class ScalarColumnData(AutoRepr):
+class ScalarColumnData(BaseCasaObject):
 
     @classmethod
     def read(cls, f):
@@ -922,7 +965,7 @@ class ScalarColumnData(AutoRepr):
         return self
 
 
-class ColumnDesc(AutoRepr):
+class ColumnDesc(BaseCasaObject):
 
     @classmethod
     def read(cls, f):
