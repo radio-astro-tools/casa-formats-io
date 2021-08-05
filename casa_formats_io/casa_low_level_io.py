@@ -331,6 +331,10 @@ class Table(BaseCasaObject):
 
     @classmethod
     def read(cls, filename, endian='<'):
+        """
+        Read a CASA table - note that this is currently **experimental** and
+        should not be used for production code.
+        """
 
         with open(os.path.join(filename, 'table.dat'), 'rb') as f_orig:
 
