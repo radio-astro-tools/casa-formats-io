@@ -61,7 +61,7 @@ def test_getdminfo_large():
     filename = os.path.join(DATA, 'lt32bit.image')
     with open(os.path.join(filename, 'table.f0'), 'rb') as f_orig:
         f = EndianAwareFileHandle(f_orig, '>', filename)
-        magic = f.read(4)
+        magic = f.read(4)  # noqa
         lt32bit = TiledCellStMan()
         lt32bit.read_header(f)
     assert_equal(lt32bit.cube_shape, (320, 320, 1, 1920))
@@ -69,7 +69,7 @@ def test_getdminfo_large():
     filename = os.path.join(DATA, 'gt32bit.image')
     with open(os.path.join(filename, 'table.f0'), 'rb') as f_orig:
         f = EndianAwareFileHandle(f_orig, '>', filename)
-        magic = f.read(4)
+        magic = f.read(4)  # noqa
         gt32bit = TiledCellStMan()
         gt32bit.read_header(f)
     assert_equal(gt32bit.cube_shape, (640, 640, 1, 1920))
@@ -188,22 +188,22 @@ def test_logtable(tmp_path):
 
 
 @pytest.mark.parametrize('tablename', ('.',
-                                   'ANTENNA',
-                                   'CALDEVICE',
-                                   'DATA_DESCRIPTION',
-                                   'FEED',
-                                   'FIELD',
-                                   'FLAG_CMD',
-                                   'HISTORY',
-                                   'OBSERVATION',
-                                   'POINTING',
-                                   'POLARIZATION',
-                                   'PROCESSOR',
-                                   'SOURCE',
-                                   'SPECTRAL_WINDOW',
-                                   'STATE',
-                                   'SYSCAL',
-                                   'SYSPOWER'))
+                                       'ANTENNA',
+                                       'CALDEVICE',
+                                       'DATA_DESCRIPTION',
+                                       'FEED',
+                                       'FIELD',
+                                       'FLAG_CMD',
+                                       'HISTORY',
+                                       'OBSERVATION',
+                                       'POINTING',
+                                       'POLARIZATION',
+                                       'PROCESSOR',
+                                       'SOURCE',
+                                       'SPECTRAL_WINDOW',
+                                       'STATE',
+                                       'SYSCAL',
+                                       'SYSPOWER'))
 def test_ms_tables(tablename):
 
     # t = Table.read(os.path.join(DATA, 'small.ms', table), endian='<')
@@ -233,7 +233,8 @@ def test_ms_tables(tablename):
                 continue
             if tablename == 'CALDEVICE' and colname in ['CAL_EFF', 'TEMPERATURE_LOAD']:
                 continue
-            if tablename == 'SPECTRAL_WINDOW' and colname in ['CHAN_FREQ', 'CHAN_WIDTH', 'EFFECTIVE_BW', 'RESOLUTION', 'ASSOC_SPW_ID', 'ASSOC_NATURE']:
+            if tablename == 'SPECTRAL_WINDOW' and colname in ['CHAN_FREQ', 'CHAN_WIDTH', 'EFFECTIVE_BW',
+                                                              'RESOLUTION', 'ASSOC_SPW_ID', 'ASSOC_NATURE']:
                 continue
 
             # Wrong endian
@@ -247,6 +248,7 @@ def test_ms_tables(tablename):
             assert_equal(tt[colname], tb.getcol(colname).T)
 
         tb.close()
+
 
 @pytest.mark.openfiles_ignore
 @pytest.mark.skipif('not CASATOOLS_INSTALLED')
