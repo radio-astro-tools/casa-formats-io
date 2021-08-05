@@ -46,7 +46,7 @@ def assert_header_correct(casa_filename):
 
     # Now use our coordsys_to_astropy_wcs function to create the header and compare
     # the results.
-    table = Table.read(casa_filename)
+    table = Table.read(casa_filename, endian='>')
     coords = table.desc.keywords.as_dict()['coords']
     actual_wcs = coordsys_to_astropy_wcs(coords)
     actual_header = actual_wcs.to_header()

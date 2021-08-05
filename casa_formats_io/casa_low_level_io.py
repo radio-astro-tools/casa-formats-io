@@ -375,10 +375,6 @@ class Table(BaseCasaObject):
 
         coldesc = self.desc.column_description
 
-        # Variable length strings are stored in their own buckets which we cache
-        # as needed.
-        variable_string_buckets = {}
-
         t = AstropyTable()
 
         for colindex in range(len(coldesc)):
@@ -397,154 +393,14 @@ class Table(BaseCasaObject):
                 if column.data.seqnr == seqnr:
                     colindex_in_dm += 1
 
-            # Open the main file corresponding to the data manager
-            fx_filename = os.path.join(self._filename, f'table.f{seqnr}')
-            f = EndianAwareFileHandle(open(fx_filename, 'rb'), '<', self._filename)
-
-            # Open indirect array file if needed (sometimes arrays are stored
-            # in these files).
-            if os.path.exists(fx_filename + 'i'):
-                fi = EndianAwareFileHandle(open(fx_filename + 'i', 'rb'), '<', self._filename)
-            else:
-                fi = None
-
             value_type = coldesc[colindex].value_type
             colname = coldesc[colindex].name
 
-            if isinstance(dm, StandardStMan):
-
-                f.seek(512 + dm.first_index_bucket_number * dm.bucket_size + dm.idx_bucket_offset + 4)
-
-                index = SSMIndex.read(f)
-                if colname == 'APPLIED':
-                    print(index)
-
-                shape = self.column_set.columns[colindex].data.shape
-                nelements = int(np.product(shape))
-
-                data = []
-
-                rows_in_bucket = np.diff(np.hstack([0, np.array(index.last_row.elements) + 1]))
-
-                rows_in_bucket = {key: value for (key, value) in zip(index.bucket_number.elements, rows_in_bucket)}
-
-                for bucket_id in index.bucket_number.elements:
-
-                    # Find the starting position of the column in the bucket
-                    f.seek(512 + dm.bucket_size * (bucket_id + dm.column_index_map.elements[colindex_in_dm]) + dm.column_offset.elements[colindex_in_dm])
-
-                    if value_type == 'string':
-                        # TODO: support shape != None for string columns
-                        maxlen = coldesc[colindex].maxlen
-                        if maxlen == 0:
-                            subdata = []
-                            for irow in range(rows_in_bucket[bucket_id]):
-                                bytes = f.read(8)
-                                length = read_int32(f)
-                                if length <= 8:
-                                    subdata.append(bytes[:length])
-                                else:
-                                    vs_bucket_id = bytes_to_int32(bytes[:4], '<')
-                                    offset = bytes_to_int32(bytes[4:], '<')
-                                    if vs_bucket_id not in variable_string_buckets:
-                                        pos = f.tell()
-                                        f.seek(512 + dm.bucket_size * vs_bucket_id + 16)
-                                        variable_string_buckets[vs_bucket_id] = f.read(dm.bucket_size - 16)
-                                        f.seek(pos)
-                                        if colname == 'COMMAND':
-                                            print(vs_bucket_id, variable_string_buckets[vs_bucket_id])
-                                    bytes = variable_string_buckets[vs_bucket_id][offset:offset + length]
-                                    if coldesc[colindex].ndim != 0:  # variable length
-                                        n = bytes_to_int32(bytes[4:8], '>')
-                                        print('n', n)
-                                        strings = []
-                                        pos = 12
-                                        for i in range(n):
-                                            l = bytes_to_int32(bytes[pos:pos + 4], '>')
-                                            strings.append(bytes[pos + 4: pos + 4 + l])
-                                            pos += 4 + l
-                                        bytes = strings
-                                        print('bytes', strings)
-                                    subdata.append(bytes)
-                            data.append(np.array(subdata))
-                        else:
-                            print('ICI')
-                            data.append(np.fromstring(f.read(maxlen * rows_in_bucket[bucket_id]), dtype=f'S{maxlen}'))
-                    else:
-                        if coldesc[colindex].is_direct or 'Scalar' in coldesc[colindex].stype:
-                            data.append(read_as_numpy_array(f, value_type, rows_in_bucket[bucket_id] * nelements, shape=(-1,) + shape))
-                        else:
-                            values = []
-                            for irow in range(rows_in_bucket[bucket_id]):
-                                offset = read_int64(f)
-                                fi.seek(offset)
-                                ndim = read_int32(fi)
-                                subshape = []
-                                for idim in range(ndim):
-                                    subshape.append(read_int32(fi))
-                                size = int(np.product(subshape))
-                                values.append(read_as_numpy_array(fi, value_type, size, shape=subshape[::-1]))
-                            data.append(np.array(values))
-                if data:
-                    if colname == 'APP_PARAMS':
-                        print("HEY")
-                        print(data)
-
-                    if data[0].ndim > 1:
-                        # print('=' * 32)
-                        # for item in data:
-                        #     print(colname, item.shape)
-                        t[colname] = np.vstack(data)
-                    else:
-                        t[colname] = np.hstack(data)
-                else:
-                    t[colname] = np.array([], dtype=TO_DTYPE[value_type])
-            elif isinstance(dm, IncrementalStMan):
-
-                # Start off by reading the bucket
-                f.seek(512 + dm.number_of_buckets * dm.bucket_size + 4)
-                index = ISMIndex.read(f)
-
-                n_rows = index.rows.elements[-1]
-
-                if n_rows > 0:
-
-                    # Now move to the data location in the first bucket
-                    # TODO: need to check what happens if the data doesn't fit into one bucket
-                    f.seek(512)
-
-                    # Read in length of data
-                    length = read_int32(f)
-
-                    # Read indices next to find out how many 'change' values there are
-                    f.seek(512 + length)
-                    n_changes = read_int32(f)
-
-                    # Read in the indices
-                    indices = np.frombuffer(f.read(n_changes * 4), dtype='<i4')
-
-                    # Read in the offsets
-                    offsets = np.frombuffer(f.read(n_changes * 4), dtype='<i4')
-
-                    # Now go back and read data
-                    f.seek(516)
-                    values = read_as_numpy_array(f, value_type, n_changes)
-
-                    # Now expand into full size array
-
-                    # https://github.com/dask/dask/issues/4389
-                    repeats = np.diff(np.hstack([indices, n_rows]))
-                    data = np.repeat(values, repeats)
-
-                    t[colname] = data
-
-                else:
-
-                    t[colname] = np.array([], dtype=TO_DTYPE[value_type])
-
+            if hasattr(dm, 'read_column'):
+                t[colname] = dm.read_column(self._filename, seqnr, self.column_set.columns[colindex], coldesc[colindex], colindex_in_dm)
             else:
-                # TODO: Implement data reading
                 pass
+
         return t
 
 
@@ -635,6 +491,93 @@ class StandardStMan(BaseCasaObject):
         self.index_length = read_int32(f)
         self.number_indices = read_int32(f)
 
+    def read_column(self, filename, seqnr, column, coldesc, colindex_in_dm):
+
+        # Open the main file corresponding to the data manager
+        fx_filename = os.path.join(filename, f'table.f{seqnr}')
+        f = EndianAwareFileHandle(open(fx_filename, 'rb'), '<', filename)
+
+        # Open indirect array file if needed (sometimes arrays are stored
+        # in these files).
+        if os.path.exists(fx_filename + 'i'):
+            fi = EndianAwareFileHandle(open(fx_filename + 'i', 'rb'), '<', filename)
+        else:
+            fi = None
+
+        # Variable length strings are stored in their own buckets which we cache
+        # as needed.
+        variable_string_buckets = {}
+
+        f.seek(512 + self.first_index_bucket_number * self.bucket_size + self.idx_bucket_offset + 4)
+
+        index = SSMIndex.read(f)
+
+        shape = column.data.shape
+        nelements = int(np.product(shape))
+
+        data = []
+
+        rows_in_bucket = np.diff(np.hstack([0, np.array(index.last_row.elements) + 1]))
+        rows_in_bucket = {key: value for (key, value) in zip(index.bucket_number.elements, rows_in_bucket)}
+
+        for bucket_id in index.bucket_number.elements:
+
+            # Find the starting position of the column in the bucket
+            f.seek(512 + self.bucket_size * (bucket_id + self.column_index_map.elements[colindex_in_dm]) + self.column_offset.elements[colindex_in_dm])
+
+            if coldesc.value_type == 'string':
+                if coldesc.maxlen == 0:
+                    subdata = []
+                    for irow in range(rows_in_bucket[bucket_id]):
+                        bytes = f.read(8)
+                        length = read_int32(f)
+                        if length <= 8:
+                            subdata.append(bytes[:length])
+                        else:
+                            vs_bucket_id = bytes_to_int32(bytes[:4], '<')
+                            offset = bytes_to_int32(bytes[4:], '<')
+                            if vs_bucket_id not in variable_string_buckets:
+                                pos = f.tell()
+                                f.seek(512 + self.bucket_size * vs_bucket_id + 16)
+                                variable_string_buckets[vs_bucket_id] = f.read(self.bucket_size - 16)
+                                f.seek(pos)
+                            bytes = variable_string_buckets[vs_bucket_id][offset:offset + length]
+                            if coldesc.ndim != 0:
+                                n = bytes_to_int32(bytes[4:8], '>')
+                                strings = []
+                                pos = 12
+                                for i in range(n):
+                                    l = bytes_to_int32(bytes[pos:pos + 4], '>')
+                                    strings.append(bytes[pos + 4: pos + 4 + l])
+                                    pos += 4 + l
+                                bytes = strings
+                            subdata.append(bytes)
+                    data.append(np.array(subdata))
+                else:
+                    data.append(np.fromstring(f.read(coldesc.maxlen * rows_in_bucket[bucket_id]), dtype=f'S{coldesc.maxlen}'))
+            else:
+                if coldesc.is_direct or 'Scalar' in coldesc.stype:
+                    data.append(read_as_numpy_array(f, coldesc.value_type, rows_in_bucket[bucket_id] * nelements, shape=(-1,) + shape))
+                else:
+                    values = []
+                    for irow in range(rows_in_bucket[bucket_id]):
+                        offset = read_int64(f)
+                        fi.seek(offset)
+                        ndim = read_int32(fi)
+                        subshape = []
+                        for idim in range(ndim):
+                            subshape.append(read_int32(fi))
+                        size = int(np.product(subshape))
+                        values.append(read_as_numpy_array(fi, coldesc.value_type, size, shape=subshape[::-1]))
+                    data.append(np.array(values))
+        if data:
+            if data[0].ndim > 1:
+                return np.vstack(data)
+            else:
+                return np.hstack(data)
+        else:
+            return np.array([], dtype=TO_DTYPE[coldesc.value_type])
+
 
 
 class IncrementalStMan(BaseCasaObject):
@@ -668,6 +611,54 @@ class IncrementalStMan(BaseCasaObject):
         if version > 1:
             self.number_of_free_buckets = read_int32(f)
             self.first_free_bucket = read_int32(f)
+
+    def read_column(self, filename, seqnr, column, coldesc, colindex_in_dm):
+
+        # Open the main file corresponding to the data manager
+        fx_filename = os.path.join(filename, f'table.f{seqnr}')
+        f = EndianAwareFileHandle(open(fx_filename, 'rb'), '<', filename)
+
+        # Start off by reading the bucket
+        f.seek(512 + self.number_of_buckets * self.bucket_size + 4)
+        index = ISMIndex.read(f)
+
+        n_rows = index.rows.elements[-1]
+
+        if n_rows > 0:
+
+            # Now move to the data location in the first bucket
+            # TODO: need to check what happens if the data doesn't fit into one bucket
+            f.seek(512)
+
+            # Read in length of data
+            length = read_int32(f)
+
+            # Read indices next to find out how many 'change' values there are
+            f.seek(512 + length)
+            n_changes = read_int32(f)
+
+            # Read in the indices
+            indices = np.frombuffer(f.read(n_changes * 4), dtype='<i4')
+
+            # Read in the offsets
+            offsets = np.frombuffer(f.read(n_changes * 4), dtype='<i4')
+
+            # Now go back and read data
+            f.seek(516)
+            values = read_as_numpy_array(f, coldesc.value_type, n_changes)
+
+            # Now expand into full size array
+
+            # https://github.com/dask/dask/issues/4389
+            repeats = np.diff(np.hstack([indices, n_rows]))
+            data = np.repeat(values, repeats)
+
+            return data
+
+        else:
+
+            return np.array([], dtype=TO_DTYPE[coldesc.value_type])
+
 
 
 @with_nbytes_prefix

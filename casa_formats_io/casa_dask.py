@@ -152,7 +152,7 @@ def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
     img_fn = os.path.join(str(imagename), 'table.f0_TSM0')
 
     # load the metadata from the image table.
-    table = Table.read(str(imagename))
+    table = Table.read(str(imagename), endian='>')
 
     # extract data manager
     dm = table.column_set.data_managers[0]
