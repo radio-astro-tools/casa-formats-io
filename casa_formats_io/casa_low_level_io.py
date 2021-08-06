@@ -30,7 +30,7 @@ def _peek(f, length):
     f.seek(pos)
 
 
-def peek_no_prefix(f, length):
+def _peek_no_prefix(f, length):
     # Internal function used for debugging - show the next N bytes
     pos = f.tell()
     print(repr(f.read(length)))
@@ -379,7 +379,7 @@ class Table(BaseCasaObject):
 
         coldesc = self.desc.column_description
 
-        t = AstropyTable()
+        tbl = AstropyTable()
 
         for colindex in range(len(coldesc)):
 
@@ -401,11 +401,11 @@ class Table(BaseCasaObject):
             colname = coldesc[colindex].name
 
             if hasattr(dm, 'read_column'):
-                t[colname] = dm.read_column(self._filename, seqnr, self.column_set.columns[colindex], coldesc[colindex], colindex_in_dm)
+                tbl[colname] = dm.read_column(self._filename, seqnr, self.column_set.columns[colindex], coldesc[colindex], colindex_in_dm)
             else:
                 pass
 
-        return t
+        return tbl
 
 
     @classmethod
