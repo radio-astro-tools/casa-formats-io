@@ -9,7 +9,7 @@ import numpy as np
 
 import dask.array
 
-from .casa_low_level_io import getdminfo
+from .casa_low_level_io import Table
 from ._casa_chunking import _combine_chunks
 
 __all__ = ['image_to_dask']
@@ -151,24 +151,21 @@ def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
     # each of the chunks is stored on disk in fortran-order
     img_fn = os.path.join(str(imagename), 'table.f0_TSM0')
 
-    # load the metadata from the image table. Note that this uses our own
-    # implementation of getdminfo, which is equivalent to
-    # from casatools import table
-    # tb = table()
-    # tb.open(str(imagename))
-    # dminfo = tb.getdminfo()
-    # tb.close()
-    dminfo = getdminfo(str(imagename))
+    # load the metadata from the image table.
+    table = Table.read(str(imagename), endian='>')
+
+    # extract data manager
+    dm = table.column_set.data_managers[0]
 
     # Determine whether file is big endian
-    big_endian = dminfo['*1']['BIGENDIAN']
+    big_endian = dm.big_endian
 
     # chunkshape defines how the chunks (array subsets) are written to disk
-    chunkshape = tuple(dminfo['*1']['SPEC']['DEFAULTTILESHAPE'])
+    chunkshape = tuple(dm.default_tile_shape)
     chunksize = np.product(chunkshape)
 
     # the total shape defines the final output array shape
-    totalshape = dminfo['*1']['SPEC']['HYPERCUBES']['*1']['CubeShape']
+    totalshape = dm.cube_shape
 
     # we expect that the total size of the array will be determined by finding
     # the number of chunks along each dimension rounded up

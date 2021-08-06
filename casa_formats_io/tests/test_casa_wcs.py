@@ -10,7 +10,7 @@ from astropy.io import fits
 
 from numpy.testing import assert_allclose
 
-from ..casa_low_level_io import getdesc
+from ..casa_low_level_io import Table
 from ..casa_wcs import coordsys_to_astropy_wcs
 
 HEADER_FILENAME = os.path.join(os.path.dirname(__file__), 'data', 'header_jybeam.hdr')
@@ -46,8 +46,9 @@ def assert_header_correct(casa_filename):
 
     # Now use our coordsys_to_astropy_wcs function to create the header and compare
     # the results.
-    desc = getdesc(casa_filename)
-    actual_wcs = coordsys_to_astropy_wcs(desc['_keywords_']['coords'])
+    table = Table.read(casa_filename, endian='>')
+    coords = table.desc.keywords.as_dict()['coords']
+    actual_wcs = coordsys_to_astropy_wcs(coords)
     actual_header = actual_wcs.to_header()
 
     assert sorted(actual_header) == sorted(reference_header)
