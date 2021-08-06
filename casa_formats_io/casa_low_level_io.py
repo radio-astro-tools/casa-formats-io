@@ -439,8 +439,8 @@ class TableDesc(BaseCasaObject):
 
         check_type_and_version(f, 'TableDesc', 2)
 
-        unknown1 = read_int32(f)  # noqa
-        unknown2 = read_int32(f)  # noqa
+        unknown1 = read_string(f)  # noqa
+        unknown2 = read_string(f)  # noqa
         unknown3 = read_string(f)  # noqa
 
         self.keywords = TableRecord.read(f)
