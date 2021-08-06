@@ -132,7 +132,7 @@ def test_generic_table_read(tmp_path):
     reference_getdminfo = tb.getdminfo()
     tb.close()
 
-    assert pformat(desc_actual) == pformat(desc_reference).replace(', dtype=int32', '')
+    assert pformat(desc_actual).replace(', dtype=int32', '') == pformat(desc_reference).replace(', dtype=int32', '')
 
     actual_getdminfo = getdminfo(filename_casa, endian='<')
 
