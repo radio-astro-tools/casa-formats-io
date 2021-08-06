@@ -626,36 +626,52 @@ class IncrementalStMan(BaseCasaObject):
         f.seek(512 + self.number_of_buckets * self.bucket_size + 4)
         index = ISMIndex.read(f)
 
-        n_rows = index.rows.elements[-1]
+        rows_in_bucket = np.diff(index.last_row.elements)
+        rows_in_bucket = {key: value for (key, value) in zip(index.bucket_number.elements, rows_in_bucket)}
+
+        n_rows = index.last_row.elements[-1]
 
         if n_rows > 0:
 
-            # Now move to the data location in the first bucket
-            # TODO: need to check what happens if the data doesn't fit into one bucket
-            f.seek(512)
+            data = []
 
-            # Read in length of data
-            length = read_int32(f)
+            for bucket_id in index.bucket_number.elements:
 
-            # Read indices next to find out how many 'change' values there are
-            f.seek(512 + length)
-            n_changes = read_int32(f)
+                # Now move to the data location in the bucket
+                f.seek(512 + bucket_id * self.bucket_size)
 
-            # Read in the indices
-            indices = np.frombuffer(f.read(n_changes * 4), dtype='<i4')
+                # Read in length of data
+                length = read_int32(f)
 
-            # Read in the offsets
-            offsets = np.frombuffer(f.read(n_changes * 4), dtype='<i4')
+                # Read indices next to find out how many 'change' values there are
+                f.seek(512 + bucket_id * self.bucket_size + length)
 
-            # Now go back and read data
-            f.seek(516)
-            values = read_as_numpy_array(f, coldesc.value_type, n_changes)
+                for i in range(colindex_in_dm + 1):
 
-            # Now expand into full size array
+                    n_changes = read_int32(f)
 
-            # https://github.com/dask/dask/issues/4389
-            repeats = np.diff(np.hstack([indices, n_rows]))
-            data = np.repeat(values, repeats)
+                    # Read in the indices
+                    indices = np.frombuffer(f.read(n_changes * 4), dtype='<i4')
+
+                    # Read in the offsets
+                    offsets = np.frombuffer(f.read(n_changes * 4), dtype='<i4')
+
+                # Now go back and read data
+                f.seek(516 + bucket_id * self.bucket_size)
+
+                values = []
+                for off in offsets:
+                    f.seek(516 + bucket_id * self.bucket_size + off)
+                    values.append(read_as_numpy_array(f, coldesc.value_type, 1))
+                values = np.hstack(values)
+
+                # Now expand into full size array
+
+                # https://github.com/dask/dask/issues/4389
+                repeats = np.diff(np.hstack([indices, rows_in_bucket[bucket_id]]))
+                data.append(np.repeat(values, repeats))
+
+            data = np.hstack(data)
 
             return data
 
@@ -713,9 +729,9 @@ class ISMIndex(BaseCasaObject):
         version = check_type_and_version(f, 'ISMIndex', 1)
         self.n_used = read_int32(f)
         if version > 1:
-            self.rows = Block.read(f, read_int64)
+            self.last_row = Block.read(f, read_int64)
         else:
-            self.rows = Block.read(f, read_int32)
+            self.last_row = Block.read(f, read_int32)
         self.bucket_number = Block.read(f, read_int32)
         return self
 
