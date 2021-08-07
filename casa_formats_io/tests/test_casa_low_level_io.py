@@ -1,6 +1,7 @@
 from __future__ import print_function, absolute_import, division
 
 import os
+import glob
 import pytest
 import numpy as np
 from numpy.testing import assert_equal
@@ -131,7 +132,7 @@ def test_generic_table_read(tmp_path):
     reference_getdminfo = tb.getdminfo()
     tb.close()
 
-    assert pformat(desc_actual) == pformat(desc_reference)
+    assert pformat(desc_actual).replace(', dtype=int32', '') == pformat(desc_reference).replace(', dtype=int32', '')
 
     actual_getdminfo = getdminfo(filename_casa, endian='<')
 
@@ -275,3 +276,35 @@ def test_vector_columns(tmp_path):
     assert_equal(t['short'], t2['short'])
     assert_equal(t['int'], t2['int'])
     assert_equal(t['double'], t2['double'])
+
+
+# Test reading tables in the casadata package
+
+try:
+    from casadata import datapath
+except ImportError:
+    CASADATA_TABLES = []
+    CASADATA_INSTALLED = True
+else:
+    # TODO: In future we can include more of the tables in the testing
+    CASADATA_TABLES = [os.path.dirname(x) for x in glob.glob(os.path.join(datapath, 'geodetic', 'IERS*', 'table.dat'), recursive=True)]
+    CASADATA_INSTALLED = False
+
+@pytest.mark.parametrize('table_filename', CASADATA_TABLES)
+def test_casadata(table_filename):
+
+    t = Table.read(table_filename, endian='<')
+    tt = t.read_as_astropy_table()
+
+    if CASATOOLS_INSTALLED:
+
+        tb = table()
+        tb.open(table_filename)
+
+        assert tt.colnames == tb.colnames()
+
+        for colname in tt.colnames:
+            print(colname)
+            assert_equal(tt[colname], tb.getcol(colname).T)
+
+        tb.close()
