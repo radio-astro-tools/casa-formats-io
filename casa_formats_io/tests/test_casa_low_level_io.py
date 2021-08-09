@@ -286,8 +286,7 @@ except ImportError:
     CASADATA_TABLES = []
     CASADATA_INSTALLED = True
 else:
-    # TODO: In future we can include more of the tables in the testing
-    CASADATA_TABLES = [os.path.dirname(x) for x in glob.glob(os.path.join(datapath, 'geodetic', 'IERS*', 'table.dat'), recursive=True)]
+    CASADATA_TABLES = [os.path.dirname(x) for x in glob.glob(os.path.join(datapath, '**', 'table.dat'), recursive=True)]
     CASADATA_INSTALLED = False
 
 @pytest.mark.parametrize('table_filename', CASADATA_TABLES)
