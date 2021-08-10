@@ -168,6 +168,7 @@ TO_DTYPE['uint'] = 'u4'
 TO_DTYPE['short'] = 'i2'
 TO_DTYPE['string'] = '<U16'
 TO_DTYPE['bool'] = 'bool'
+TO_DTYPE['record'] = 'O'
 
 TO_TYPEREPR = {}
 TO_TYPEREPR['dcomplex'] = 'void'
@@ -401,7 +402,9 @@ class Table(BaseCasaObject):
             colname = coldesc[colindex].name
 
             if hasattr(dm, 'read_column'):
-                tbl[colname] = dm.read_column(self._filename, seqnr, self.column_set.columns[colindex], coldesc[colindex], colindex_in_dm)
+                coldata = dm.read_column(self._filename, seqnr, self.column_set.columns[colindex], coldesc[colindex], colindex_in_dm)
+                if coldata is not None:
+                    tbl[colname] = coldata
             else:
                 pass
 
@@ -559,6 +562,9 @@ class StandardStMan(BaseCasaObject):
                     data.append(np.array(subdata))
                 else:
                     data.append(np.fromstring(f.read(coldesc.maxlen * rows_in_bucket[bucket_id]), dtype=f'S{coldesc.maxlen}'))
+            elif coldesc.value_type == 'record':
+                # TODO: determine how to handle this properly
+                data = None
             else:
                 if coldesc.is_direct or 'Scalar' in coldesc.stype:
                     data.append(read_as_numpy_array(f, coldesc.value_type, rows_in_bucket[bucket_id] * nelements, shape=(-1,) + shape))
@@ -580,7 +586,7 @@ class StandardStMan(BaseCasaObject):
             else:
                 return np.hstack(data)
         else:
-            return np.array([], dtype=TO_DTYPE[coldesc.value_type])
+            return None
 
 
 
@@ -1007,7 +1013,7 @@ class ColumnDesc(BaseCasaObject):
 
         stype, sversion = read_type(f)
 
-        if not stype.startswith(('ScalarColumnDesc', 'ArrayColumnDesc')) or sversion != 1:
+        if not stype.startswith(('ScalarColumnDesc', 'ScalarRecordColumnDesc', 'ArrayColumnDesc')) or sversion != 1:
             raise NotImplementedError('Support for {0} version {1} not implemented'.format(stype, sversion))
 
         # https://github.com/casacore/casacore/blob/dbf28794ef446bbf4e6150653dbe404379a3c429/tables/Tables/BaseColDesc.cc#L285
@@ -1020,9 +1026,9 @@ class ColumnDesc(BaseCasaObject):
         self.value_type = TYPES[read_int32(f)]
 
         self.option = read_int32(f)
-        self.is_direct = self.option & 1
-        self.is_undefined = self.option & 2
-        self.is_fixed_shape = self.option & 4
+        self.is_direct = self.option & 1 == 1
+        self.is_undefined = self.option & 2 == 2
+        self.is_fixed_shape = self.option & 4 == 4
 
         self.ndim = read_int32(f)
         if self.ndim != 0:
@@ -1046,12 +1052,10 @@ class ColumnDesc(BaseCasaObject):
                 default = f.read(1)
             elif self.value_type == 'string':
                 default = read_string(f)
+            elif self.value_type == 'record':
+                default = f.read(8)
             else:
                 raise NotImplementedError(f"Can't read default value for {self.value_type}")
-
-        pos = f.tell()
-        f.seek(pos)
-
 
         return self
 
