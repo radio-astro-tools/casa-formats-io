@@ -354,7 +354,7 @@ class Table(BaseCasaObject):
 
                 with open(fx_filename, 'rb') as f_orig:
 
-                    if isinstance(dm, TiledShapeStMan):
+                    if isinstance(dm, (TiledCellStMan, TiledShapeStMan, StManAipsIO)):
                         endian = '>'
 
                     f = EndianAwareFileHandle(f_orig, endian, filename)
@@ -742,9 +742,14 @@ class TiledStMan(BaseCasaObject):
     @with_nbytes_prefix
     def read_header(self, f):
 
-        check_type_and_version(f, 'TiledStMan', 2)
+        version = check_type_and_version(f, 'TiledStMan', (1, 2))
 
+        if version >= 2:
         self.big_endian = f.read(1) == b'\x01'  # noqa
+        else:
+            self.big_endian = True
+
+        # TODO: Set endian flag on f here
 
         self.seqnr = read_int32(f)
         # if self.seqnr != 0:
@@ -835,6 +840,19 @@ class TiledShapeStMan(TiledStMan):
         # super().read_header(f)
 
 
+class StManAipsIO(BaseCasaObject):
+
+    @classmethod
+    def read(cls, f):
+        self = cls()
+        self.name = 'StManAipsIO'
+        return self
+
+    @with_nbytes_prefix
+    def read_header(self, f):
+        check_type_and_version(f, 'StManAipsIO', 2)
+
+
 class TiledColumnStMan(TiledStMan):
 
     @classmethod
@@ -900,6 +918,8 @@ class ColumnSet(BaseCasaObject):
                 dm_cls = TiledShapeStMan
             elif name == 'TiledColumnStMan':
                 dm_cls = TiledColumnStMan
+            elif name == 'StManAipsIO':
+                dm_cls = StManAipsIO
             else:
                 raise NotImplementedError('Data manager {0} not supported'.format(name))
 
