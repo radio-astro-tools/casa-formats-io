@@ -289,6 +289,7 @@ else:
     CASADATA_TABLES = [os.path.dirname(x) for x in glob.glob(os.path.join(datapath, '**', 'table.dat'), recursive=True)]
     CASADATA_INSTALLED = False
 
+
 @pytest.mark.parametrize('table_filename', CASADATA_TABLES)
 def test_casadata(table_filename):
 
@@ -303,7 +304,6 @@ def test_casadata(table_filename):
         assert tt.colnames == tb.colnames()
 
         for colname in tt.colnames:
-            print(colname)
             assert_equal(tt[colname], tb.getcol(colname).T)
 
         tb.close()
