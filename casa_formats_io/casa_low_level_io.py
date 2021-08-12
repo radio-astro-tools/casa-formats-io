@@ -899,6 +899,11 @@ class TiledCellStMan(TiledStMan):
 
         super().read_header(f)
 
+    def read_column(self, filename, seqnr, column, coldesc, colindex_in_dm):
+        from .casa_dask import image_to_dask
+        array = image_to_dask(filename, seqnr=seqnr, dm=self, is_mask=coldesc.value_type == 'bool')
+        return array.compute().reshape((1,) + array.shape)
+
 
 class TiledShapeStMan(TiledStMan):
 
