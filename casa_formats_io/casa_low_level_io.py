@@ -185,6 +185,9 @@ def read_as_numpy_array(f, value_type, nelem, shape=None):
     """
     if value_type == 'string':
         array = np.array([read_string(f) for i in range(nelem)])
+        if nelem > 0:
+            if max([len(s) for s in array]) < 16:  # HACK: only needed for getdesc comparisons
+                array = array.astype('<U16')
     elif value_type == 'bool':
         array = np.unpackbits(np.frombuffer(f.read(int(np.ceil(nelem / 8)) * 8), dtype='uint8'), bitorder='little').astype(bool)[:nelem]
     elif value_type in TO_DTYPE:
