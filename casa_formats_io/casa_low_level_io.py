@@ -643,7 +643,7 @@ class StandardStMan(BaseCasaObject):
                 data = None
             else:
                 if coldesc.is_direct or 'Scalar' in coldesc.stype:
-                    data.append(read_as_numpy_array(f, coldesc.value_type, rows_in_bucket[bucket_id] * nelements, shape=(-1,) + shape))
+                    data.append(read_as_numpy_array(f, coldesc.value_type, rows_in_bucket[bucket_id] * nelements, shape=(-1,) + shape[::-1]))
                 else:
                     values = []
                     for irow in range(rows_in_bucket[bucket_id]):

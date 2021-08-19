@@ -291,8 +291,7 @@ else:
 
 
 EXPECTED_FAILURES = [
-    'ephemerides/Sources',
-    'nrao/VLA/GainCurves',
+    'ephemerides/Sources',  # our table is too long
 ]
 
 
