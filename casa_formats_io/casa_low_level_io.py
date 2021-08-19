@@ -655,12 +655,19 @@ class IncrementalStMan(BaseCasaObject):
         # SSMBase::readHeader()
         # https://github.com/casacore/casacore/blob/d6da19830fa470bdd8434fd855abe79037fda78c/tables/DataMan/SSMBase.cc#L415
 
-        _peek_no_prefix(f, 72)
+        next = f.read(1)
+        if next == b'\x00':
+            f.endian = '>'
+        else:
+            f.endian = '<'
+        f.seek(0)
 
-        version = check_type_and_version(f, 'IncrementalStMan', 5)
+        version = check_type_and_version(f, 'IncrementalStMan', (4, 5))
 
         if version >= 5:
             self.big_endian = f.read(1) == b'\x01'  # noqa
+        else:
+            self.big_endian = True
 
         self.bucket_size = read_int32(f)
         self.number_of_buckets = read_int32(f)
@@ -677,12 +684,12 @@ class IncrementalStMan(BaseCasaObject):
 
         # Open the main file corresponding to the data manager
         fx_filename = os.path.join(filename, f'table.f{seqnr}')
-        f = EndianAwareFileHandle(open(fx_filename, 'rb'), '<', filename)
+        f = EndianAwareFileHandle(open(fx_filename, 'rb'), '>' if self.big_endian else '<', filename)
 
         # Open indirect array file if needed (sometimes arrays are stored
         # in these files).
         if os.path.exists(fx_filename + 'i'):
-            fi = EndianAwareFileHandle(open(fx_filename + 'i', 'rb'), '<', filename)
+            fi = EndianAwareFileHandle(open(fx_filename + 'i', 'rb'), '>' if self.big_endian else '<', filename)
         else:
             fi = None
 
@@ -715,10 +722,10 @@ class IncrementalStMan(BaseCasaObject):
                     n_changes = read_int32(f)
 
                     # Read in the indices
-                    indices = np.frombuffer(f.read(n_changes * 4), dtype='<i4')
+                    indices = np.frombuffer(f.read(n_changes * 4), dtype=f.endian + 'i4')
 
                     # Read in the offsets
-                    offsets = np.frombuffer(f.read(n_changes * 4), dtype='<i4')
+                    offsets = np.frombuffer(f.read(n_changes * 4), dtype=f.endian + 'i4')
 
                 # Now go back and read data
                 f.seek(516 + bucket_id * self.bucket_size)
