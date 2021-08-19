@@ -543,7 +543,8 @@ class StandardStMan(BaseCasaObject):
                 return next_variable_string_buckets[vs_bucket_id]
             pos = f.tell()
             f.seek(512 + self.bucket_size * vs_bucket_id + 12)
-            next_vs_bucket_id = read_int32(f)
+            # For some reason, the next bucket index is stored in big endian
+            next_vs_bucket_id = bytes_to_int32(f.read(4), '>')
             variable_string_buckets[vs_bucket_id] = f.read(self.bucket_size - 16)
             next_variable_string_buckets[vs_bucket_id] = next_vs_bucket_id
             f.seek(pos)

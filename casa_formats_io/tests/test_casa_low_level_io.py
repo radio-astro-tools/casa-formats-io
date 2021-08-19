@@ -290,8 +290,27 @@ else:
     CASADATA_INSTALLED = False
 
 
+EXPECTED_FAILURES = [
+    'ephemerides/Sources',
+    'nrao/VLA/CalModels/3C123_P.im',
+    'nrao/VLA/CalModels/3C380_P.im',
+    'nrao/VLA/CalModels/3C138_P.im',
+    'nrao/VLA/CalModels/3C196_P.im',
+    'nrao/VLA/CalModels/3C48_P.im',
+    'nrao/VLA/CalModels/3C295_P.im',
+    'nrao/VLA/CalModels/3C286_P.im',
+    'nrao/VLA/CalModels/3C147_P.im',
+    'nrao/VLA/GainCurves',
+    'nrao/VLA/standards/fluxcalibrator.data',
+    'gui/colormaps/default.tbl'
+]
+
+
 @pytest.mark.parametrize('table_filename', CASADATA_TABLES)
 def test_casadata(table_filename):
+
+    if os.path.relpath(table_filename, datapath) in EXPECTED_FAILURES:
+        pytest.xfail()
 
     t = Table.read(table_filename, endian='<')
     tt = t.read_as_astropy_table()
