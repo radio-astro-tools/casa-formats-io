@@ -118,7 +118,7 @@ class CASAArrayWrapper:
                     .reshape(self._chunkshape[::-1], order='F').T[item_in_chunk])
 
 
-def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None, seqnr=0, dm=None, is_mask=None):
+def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
     """
     Read a CASA image (a folder containing a ``table.f0_TSM0`` file) into a
     dask array.
@@ -144,24 +144,18 @@ def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None, seq
             mask = 'mask0'
         imagename = os.path.join(str(imagename), mask)
 
-    if is_mask:
-        mask = True
-
     if not os.path.exists(imagename):
         raise FileNotFoundError(imagename)
 
     # the data is stored in the following binary file
     # each of the chunks is stored on disk in fortran-order
+    img_fn = os.path.join(str(imagename), 'table.f0_TSM0')
 
-    img_fn = os.path.join(str(imagename), f'table.f{seqnr}_TSM0')
+    # load the metadata from the image table.
+    table = Table.read(str(imagename), endian='>')
 
-    if dm is None:
-
-        # load the metadata from the image table.
-        table = Table.read(str(imagename), endian='>')
-
-        # extract data manager
-        dm = table.column_set.data_managers[0]
+    # extract data manager
+    dm = table.column_set.data_managers[0]
 
     # Determine whether file is big endian
     big_endian = dm.big_endian
