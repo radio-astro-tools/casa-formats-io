@@ -286,12 +286,20 @@ except ImportError:
     CASADATA_TABLES = []
     CASADATA_INSTALLED = True
 else:
-    # TODO: In future we can include more of the tables in the testing
-    CASADATA_TABLES = [os.path.dirname(x) for x in glob.glob(os.path.join(datapath, 'geodetic', 'IERS*', 'table.dat'), recursive=True)]
+    CASADATA_TABLES = [os.path.dirname(x) for x in glob.glob(os.path.join(datapath, '**', 'table.dat'), recursive=True)]
     CASADATA_INSTALLED = False
+
+
+EXPECTED_FAILURES = [
+    'ephemerides/Sources',  # our table is too long
+]
+
 
 @pytest.mark.parametrize('table_filename', CASADATA_TABLES)
 def test_casadata(table_filename):
+
+    if os.path.relpath(table_filename, datapath) in EXPECTED_FAILURES:
+        pytest.xfail()
 
     t = Table.read(table_filename, endian='<')
     tt = t.read_as_astropy_table()
@@ -301,10 +309,21 @@ def test_casadata(table_filename):
         tb = table()
         tb.open(table_filename)
 
-        assert tt.colnames == tb.colnames()
+        expected_colnames = tb.colnames()
 
-        for colname in tt.colnames:
-            print(colname)
-            assert_equal(tt[colname], tb.getcol(colname).T)
+        # Some tables contain a Spectral_Record column that we can't read yet
+        # but that browsetable also can't read/display so we don't support this.
+        if 'Spectral_Record' in expected_colnames:
+            expected_colnames.remove('Spectral_Record')
+
+        assert tt.colnames == expected_colnames
+
+        for colname in expected_colnames:
+            try:
+                expected_data = tb.getcol(colname).T
+            except Exception:
+                # If casa can't read it, we can assume we don't need to support it
+                continue
+            assert_equal(tt[colname], expected_data)
 
         tb.close()

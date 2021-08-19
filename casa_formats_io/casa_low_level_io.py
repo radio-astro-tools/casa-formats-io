@@ -75,28 +75,46 @@ def with_nbytes_prefix(func):
         if nbytes == 0:
             return
         bytes = f.read(nbytes - 4)
-        if len(bytes) < nbytes - 4:
-            bytes += b'\x00' * (nbytes - 4 - len(bytes))
         b = EndianAwareFileHandle(BytesIO(bytes), f.endian, f.original_filename)
         if self:
             result = func(self, b, *args)
         else:
             result = func(b, *args)
         end = f.tell()
-        if end - start != nbytes:
-            raise IOError('Function {0} read {1} bytes instead of {2}'
-                          .format(func, end - start, nbytes))
+        # if end - start != nbytes:
+        #     raise IOError('Function {0} read {1} bytes instead of {2}'
+        #                   .format(func, end - start, nbytes))
         return result
     return wrapper
 
 
 
 def check_type_and_version(f, name, versions):
+
+    # HACK: sometimes the endian flag is not set correctly on f, and we need
+    # to figure out why. In the mean time, we can tell the actual endianness
+    # from the next byte, because we expect the next four bytes to be the length
+    # of the name string, and this won't be ridiculously long.
+
+    start = f.tell()
+    next = f.read(1)
+    if next == b'\x00':
+        actual_endian = '>'
+    else:
+        actual_endian = '<'
+    f.seek(start)
+
+    if actual_endian != f.endian:
+        warnings.warn(f'Endianness of {name} did not match endianness of file'
+                      'handle, correcting')
+        f.endian = actual_endian
+
     if np.isscalar(versions):
         versions = [versions]
     stype, sversion = read_type(f)
     if stype != name or sversion not in versions:
         raise NotImplementedError('Support for {0} version {1} not implemented'.format(stype, sversion))
+
     return sversion
 
 
@@ -136,8 +154,8 @@ def read_complex128(f):
     return np.complex128(read_float64(f) + 1j * read_float64(f))
 
 
-def read_string(f):
-    value = read_int32(f)
+def read_string(f, length_modifier=0):
+    value = read_int32(f) + length_modifier
     return f.read(int(value)).replace(b'\x00', b'').decode('ascii')
 
 
@@ -168,6 +186,7 @@ TO_DTYPE['uint'] = 'u4'
 TO_DTYPE['short'] = 'i2'
 TO_DTYPE['string'] = '<U16'
 TO_DTYPE['bool'] = 'bool'
+TO_DTYPE['record'] = 'O'
 
 TO_TYPEREPR = {}
 TO_TYPEREPR['dcomplex'] = 'void'
@@ -178,12 +197,15 @@ TO_TYPEREPR['uint'] = 'uInt'
 TO_TYPEREPR['string'] = 'String'
 
 
-def read_as_numpy_array(f, value_type, nelem, shape=None):
+def read_as_numpy_array(f, value_type, nelem, shape=None, length_modifier=0):
     """
     Read the next 'nelem' values as a Numpy array
     """
     if value_type == 'string':
-        array = np.array([read_string(f) for i in range(nelem)], dtype='<U16')
+        array = np.array([read_string(f, length_modifier=length_modifier) for i in range(nelem)])
+        if nelem > 0:
+            if max([len(s) for s in array]) < 16:  # HACK: only needed for getdesc comparisons
+                array = array.astype('<U16')
     elif value_type == 'bool':
         array = np.unpackbits(np.frombuffer(f.read(int(np.ceil(nelem / 8)) * 8), dtype='uint8'), bitorder='little').astype(bool)[:nelem]
     elif value_type in TO_DTYPE:
@@ -354,7 +376,7 @@ class Table(BaseCasaObject):
 
                 with open(fx_filename, 'rb') as f_orig:
 
-                    if isinstance(dm, TiledShapeStMan):
+                    if isinstance(dm, (TiledCellStMan, TiledShapeStMan, StManAipsIO)):
                         endian = '>'
 
                     f = EndianAwareFileHandle(f_orig, endian, filename)
@@ -401,9 +423,11 @@ class Table(BaseCasaObject):
             colname = coldesc[colindex].name
 
             if hasattr(dm, 'read_column'):
-                tbl[colname] = dm.read_column(self._filename, seqnr, self.column_set.columns[colindex], coldesc[colindex], colindex_in_dm)
+                coldata = dm.read_column(self._filename, seqnr, self.column_set.columns[colindex], coldesc[colindex], colindex_in_dm)
+                if coldata is not None:
+                    tbl[colname] = coldata
             else:
-                pass
+                warnings.warn(f'Skipping column {colname} with data manager {dm.__class__.__name__}')
 
         return tbl
 
@@ -475,9 +499,12 @@ class StandardStMan(BaseCasaObject):
         # SSMBase::readHeader()
         # https://github.com/casacore/casacore/blob/d6da19830fa470bdd8434fd855abe79037fda78c/tables/DataMan/SSMBase.cc#L415
 
-        check_type_and_version(f, 'StandardStMan', 3)
+        version = check_type_and_version(f, 'StandardStMan', (2, 3))
 
-        self.big_endian = f.read(1) == b'\x01'  # noqa
+        if version >= 3:
+            self.big_endian = f.read(1) == b'\x01'  # noqa
+        else:
+            self.big_endian = True
 
         self.bucket_size = read_int32(f)
         self.number_of_buckets = read_int32(f)
@@ -487,10 +514,6 @@ class StandardStMan(BaseCasaObject):
         self.number_of_bucket_for_index = read_int32(f)
         self.first_index_bucket_number = read_int32(f)
         self.idx_bucket_offset = read_int32(f)
-        if self.idx_bucket_offset == 0:
-            # TODO: need to determine when this might not be 8
-            # https://github.com/casacore/casacore/blob/dbf28794ef446bbf4e6150653dbe404379a3c429/tables/DataMan/SSMBase.cc#L459
-            self.idx_bucket_offset = 8
         self.last_string_bucket = read_int32(f)
         self.index_length = read_int32(f)
         self.number_indices = read_int32(f)
@@ -499,22 +522,72 @@ class StandardStMan(BaseCasaObject):
 
         # Open the main file corresponding to the data manager
         fx_filename = os.path.join(filename, f'table.f{seqnr}')
-        f = EndianAwareFileHandle(open(fx_filename, 'rb'), '<', filename)
+        f = EndianAwareFileHandle(open(fx_filename, 'rb'), '>' if self.big_endian else '<', filename)
 
         # Open indirect array file if needed (sometimes arrays are stored
         # in these files).
         if os.path.exists(fx_filename + 'i'):
-            fi = EndianAwareFileHandle(open(fx_filename + 'i', 'rb'), '<', filename)
+            fi = EndianAwareFileHandle(open(fx_filename + 'i', 'rb'), '>' if self.big_endian else '<', filename)
         else:
             fi = None
 
         # Variable length strings are stored in their own buckets which we cache
         # as needed.
         variable_string_buckets = {}
+        next_variable_string_buckets = {}
 
-        f.seek(512 + self.first_index_bucket_number * self.bucket_size + self.idx_bucket_offset + 4)
+        def _ensure_variable_string_bucket_loaded(f, vs_bucket_id):
+            if vs_bucket_id in variable_string_buckets:
+                return next_variable_string_buckets[vs_bucket_id]
+            pos = f.tell()
+            f.seek(512 + self.bucket_size * vs_bucket_id + 12)
+            # For some reason, the next bucket index is stored in big endian
+            next_vs_bucket_id = bytes_to_int32(f.read(4), '>')
+            variable_string_buckets[vs_bucket_id] = f.read(self.bucket_size - 16)
+            next_variable_string_buckets[vs_bucket_id] = next_vs_bucket_id
+            f.seek(pos)
+            return next_vs_bucket_id
 
-        index = SSMIndex.read(f)
+        # To read in the SSMIndex we need to pre-load the index buckets. In
+        # cases where the index is split over multiple buckets, the first four
+        # bytes of the bucket indicate the index of the next index bucket to
+        # read. This corresponds to the logic in SSMBase.readIndexBuckets:
+        # https://github.com/casacore/casacore/blob/master/tables/DataMan/SSMBase.cc#L454
+        # We pre-load the index buckets into a single BytesIO to make it look
+        # contiguous.
+
+        index_bytes = b''
+        next_index_bucket = self.first_index_bucket_number
+        remaining_index_length = self.index_length
+
+        for bucket_id in range(self.number_of_bucket_for_index):
+
+            bucket_start = 512 + next_index_bucket * self.bucket_size
+
+            f.seek(bucket_start)
+
+            # For some reason, the next bucket index is stored in big endian
+            next_index_bucket = bytes_to_int32(f.read(4), '>')
+
+            if self.idx_bucket_offset > 0:
+                f.seek(bucket_start + self.idx_bucket_offset)
+                index_bytes += f.read(remaining_index_length)
+            elif remaining_index_length < self.bucket_size:
+                f.seek(bucket_start + 8)
+                index_bytes += f.read(remaining_index_length)
+            else:
+                f.seek(bucket_start + 8)
+                index_bytes += f.read(self.bucket_size - 8)
+
+        index_bytes = EndianAwareFileHandle(BytesIO(index_bytes[4:]), f.endian, f.original_filename)
+
+        index = SSMIndex.read(index_bytes)
+
+        if index.bucket_number.elements == []:  # empty table
+            if coldesc.value_type in TO_DTYPE:
+                return np.array([], dtype=TO_DTYPE[coldesc.value_type])
+            else:
+                return None
 
         shape = column.data.shape
         nelements = int(np.product(shape))
@@ -522,7 +595,7 @@ class StandardStMan(BaseCasaObject):
         data = []
 
         rows_in_bucket = np.diff(np.hstack([0, np.array(index.last_row.elements) + 1]))
-        rows_in_bucket = {key: value for (key, value) in zip(index.bucket_number.elements, rows_in_bucket)}
+        rows_in_bucket = {key: max(0, value) for (key, value) in zip(index.bucket_number.elements, rows_in_bucket)}
 
         for bucket_id in index.bucket_number.elements:
 
@@ -538,30 +611,39 @@ class StandardStMan(BaseCasaObject):
                         if length <= 8:
                             subdata.append(bytes[:length])
                         else:
-                            vs_bucket_id = bytes_to_int32(bytes[:4], '<')
-                            offset = bytes_to_int32(bytes[4:], '<')
-                            if vs_bucket_id not in variable_string_buckets:
-                                pos = f.tell()
-                                f.seek(512 + self.bucket_size * vs_bucket_id + 16)
-                                variable_string_buckets[vs_bucket_id] = f.read(self.bucket_size - 16)
-                                f.seek(pos)
+                            vs_bucket_id = bytes_to_int32(bytes[:4], f.endian)
+                            offset = bytes_to_int32(bytes[4:], f.endian)
+                            next_vs_bucket_id =_ensure_variable_string_bucket_loaded(f, vs_bucket_id)
                             bytes = variable_string_buckets[vs_bucket_id][offset:offset + length]
+                            if len(bytes) < length:
+                                _ensure_variable_string_bucket_loaded(f, next_vs_bucket_id)
+                                bytes += variable_string_buckets[next_vs_bucket_id][:length - len(bytes)]
                             if coldesc.ndim != 0:
-                                n = bytes_to_int32(bytes[4:8], '>')
+                                if coldesc.is_fixed_shape:
+                                    n = np.product(coldesc.shape)
+                                    pos = 0
+                                else:
+                                    n = bytes_to_int32(bytes[4:8], '>')
+                                    pos = 12
                                 strings = []
-                                pos = 12
                                 for i in range(n):
                                     l = bytes_to_int32(bytes[pos:pos + 4], '>')
                                     strings.append(bytes[pos + 4: pos + 4 + l])
                                     pos += 4 + l
+                                if coldesc.is_fixed_shape:
+                                    strings = np.reshape(strings, coldesc.shape)
                                 bytes = strings
                             subdata.append(bytes)
                     data.append(np.array(subdata))
                 else:
                     data.append(np.fromstring(f.read(coldesc.maxlen * rows_in_bucket[bucket_id]), dtype=f'S{coldesc.maxlen}'))
+            elif coldesc.value_type == 'record':
+                # TODO: determine how to handle this properly
+                warnings.warn(f'Skipping column {coldesc.name} with type record')
+                data = None
             else:
                 if coldesc.is_direct or 'Scalar' in coldesc.stype:
-                    data.append(read_as_numpy_array(f, coldesc.value_type, rows_in_bucket[bucket_id] * nelements, shape=(-1,) + shape))
+                    data.append(read_as_numpy_array(f, coldesc.value_type, rows_in_bucket[bucket_id] * nelements, shape=(-1,) + shape[::-1]))
                 else:
                     values = []
                     for irow in range(rows_in_bucket[bucket_id]):
@@ -580,7 +662,7 @@ class StandardStMan(BaseCasaObject):
             else:
                 return np.hstack(data)
         else:
-            return np.array([], dtype=TO_DTYPE[coldesc.value_type])
+            return None
 
 
 
@@ -600,10 +682,12 @@ class IncrementalStMan(BaseCasaObject):
         # SSMBase::readHeader()
         # https://github.com/casacore/casacore/blob/d6da19830fa470bdd8434fd855abe79037fda78c/tables/DataMan/SSMBase.cc#L415
 
-        version = check_type_and_version(f, 'IncrementalStMan', 5)
+        version = check_type_and_version(f, 'IncrementalStMan', (4, 5))
 
         if version >= 5:
             self.big_endian = f.read(1) == b'\x01'  # noqa
+        else:
+            self.big_endian = True
 
         self.bucket_size = read_int32(f)
         self.number_of_buckets = read_int32(f)
@@ -620,7 +704,14 @@ class IncrementalStMan(BaseCasaObject):
 
         # Open the main file corresponding to the data manager
         fx_filename = os.path.join(filename, f'table.f{seqnr}')
-        f = EndianAwareFileHandle(open(fx_filename, 'rb'), '<', filename)
+        f = EndianAwareFileHandle(open(fx_filename, 'rb'), '>' if self.big_endian else '<', filename)
+
+        # Open indirect array file if needed (sometimes arrays are stored
+        # in these files).
+        if os.path.exists(fx_filename + 'i'):
+            fi = EndianAwareFileHandle(open(fx_filename + 'i', 'rb'), '>' if self.big_endian else '<', filename)
+        else:
+            fi = None
 
         # Start off by reading the bucket
         f.seek(512 + self.number_of_buckets * self.bucket_size + 4)
@@ -651,10 +742,10 @@ class IncrementalStMan(BaseCasaObject):
                     n_changes = read_int32(f)
 
                     # Read in the indices
-                    indices = np.frombuffer(f.read(n_changes * 4), dtype='<i4')
+                    indices = np.frombuffer(f.read(n_changes * 4), dtype=f.endian + 'i4')
 
                     # Read in the offsets
-                    offsets = np.frombuffer(f.read(n_changes * 4), dtype='<i4')
+                    offsets = np.frombuffer(f.read(n_changes * 4), dtype=f.endian + 'i4')
 
                 # Now go back and read data
                 f.seek(516 + bucket_id * self.bucket_size)
@@ -662,18 +753,34 @@ class IncrementalStMan(BaseCasaObject):
                 values = []
                 for off in offsets:
                     f.seek(516 + bucket_id * self.bucket_size + off)
-                    values.append(read_as_numpy_array(f, coldesc.value_type, 1))
-                values = np.hstack(values)
+                    if coldesc.is_direct or 'Scalar' in coldesc.stype:
+                        values.append(read_as_numpy_array(f, coldesc.value_type, 1, length_modifier=-4))
+                        subshape = []
+                    else:
+                        offset = read_int64(f)
+                        fi.seek(offset)
+                        ndim = read_int32(fi)
+                        read_int32(fi)
+                        subshape = []
+                        for idim in range(ndim):
+                            subshape.append(read_int32(fi))
+                        size = int(np.product(subshape))
+                        values.append(read_as_numpy_array(fi, coldesc.value_type, size, shape=subshape[::-1]))
+                if subshape:
+                    values = np.vstack(values)
+                else:
+                    values = np.hstack(values)
 
                 # Now expand into full size array
 
                 # https://github.com/dask/dask/issues/4389
                 repeats = np.diff(np.hstack([indices, rows_in_bucket[bucket_id]]))
-                data.append(np.repeat(values, repeats))
+                data.append(np.repeat(values, repeats, axis=0))
 
-            data = np.hstack(data)
-
-            return data
+            if data[0].ndim > 1:
+                return np.vstack(data)
+            else:
+                return np.hstack(data)
 
         else:
 
@@ -712,9 +819,6 @@ class SSMIndex(BaseCasaObject):
         self.last_row = Block.read(f, read_int32)
         self.bucket_number = Block.read(f, read_int32)
 
-        if self.bucket_number.elements == []:
-            self.bucket_number.elements = list(range(self.n_used))
-
         return self
 
 
@@ -742,9 +846,14 @@ class TiledStMan(BaseCasaObject):
     @with_nbytes_prefix
     def read_header(self, f):
 
-        check_type_and_version(f, 'TiledStMan', 2)
+        version = check_type_and_version(f, 'TiledStMan', (1, 2))
 
-        self.big_endian = f.read(1) == b'\x01'  # noqa
+        if version >= 2:
+            self.big_endian = f.read(1) == b'\x01'  # noqa
+        else:
+            self.big_endian = True
+
+        # TODO: Set endian flag on f here
 
         self.seqnr = read_int32(f)
         # if self.seqnr != 0:
@@ -820,6 +929,101 @@ class TiledCellStMan(TiledStMan):
 
         super().read_header(f)
 
+    def read_column(self, filename, seqnr, column, coldesc, colindex_in_dm):
+
+        # Need to expose the following somehow
+        target_chunksize = None
+        memmap = False
+
+        # chunkshape defines how the chunks (array subsets) are written to disk
+        chunkshape = tuple(self.default_tile_shape)
+        chunksize = np.product(chunkshape)
+
+        # the total shape defines the final output array shape
+        totalshape = self.cube_shape
+
+        # we expect that the total size of the array will be determined by finding
+        # the number of chunks along each dimension rounded up
+        totalsize = np.product(np.ceil(totalshape / chunkshape)) * chunksize
+
+        # the ratio between these tells you how many chunks must be combined
+        # to create a final stack
+        stacks = np.ceil(totalshape / chunkshape).astype(int)
+        nchunks = int(np.product(stacks))
+
+        dtype = TO_DTYPE[coldesc.value_type]
+
+        if coldesc.value_type != 'bool':
+            if self.big_endian:
+                dtype = '>' + dtype
+            else:
+                dtype = '<' + dtype
+
+        itemsize = np.dtype(dtype).itemsize
+
+        chunkshape = tuple(int(x) for x in chunkshape)
+        totalshape = tuple(int(x) for x in totalshape)
+
+        # CASA chunks are typically too small to be efficient, so we use a larger
+        # chunk size for dask and then tell CASAArrayWrapper about both the native
+        # and target chunk size.
+        # chunkshape = determine_optimal_chunkshape(totalshape, chunkshape)
+
+        if target_chunksize is None:
+            target_chunksize = 10000000
+
+        if chunksize < target_chunksize:
+
+            # Find optimal chunk - since we want to be efficient we want the new
+            # chunks to be contiguous on disk so we first try and increase the
+            # chunk size in x, then y, etc.
+
+            chunkoversample = previous_chunkoversample = [1 for i in range(len(chunkshape))]
+
+            finished = False
+            for dim in range(len(chunkshape)):
+                factors = [f for f in range(stacks[dim] + 1) if stacks[dim] % f == 0]
+                for factor in factors:
+                    chunkoversample[dim] = factor
+                    if np.product(chunkoversample) * chunksize > target_chunksize:
+                        chunkoversample = previous_chunkoversample
+                        finished = True
+                        break
+                    previous_chunkoversample = chunkoversample.copy()
+                if finished:
+                    break
+
+        else:
+
+            chunkoversample = (1,) * len(chunkshape)
+
+        chunkshape = [c * o for (c, o) in zip(chunkshape, chunkoversample)]
+
+        # Create a wrapper that takes slices and returns the appropriate CASA data
+        from .casa_dask import CASAArrayWrapper
+        img_fn = os.path.join(filename, f'table.f{seqnr}_TSM0')
+
+        wrapper = CASAArrayWrapper(img_fn, totalshape, chunkshape,
+                                   chunkoversample=chunkoversample, dtype=dtype,
+                                   itemsize=itemsize, memmap=memmap)
+
+        # Convert to a dask array
+        import uuid
+        from dask.array import from_array
+        dask_array = from_array(wrapper, name='CASA Data ' + str(uuid.uuid4()),
+                                chunks=chunkshape[::-1])
+
+        # Since the chunks may not divide the array exactly, all the chunks put
+        # together may be larger than the array, so we need to get rid of any
+        # extraneous padding.
+        final_slice = tuple([slice(dim) for dim in totalshape[::-1]])
+
+        array = dask_array[final_slice]
+
+        array = array.compute().reshape((1,) + array.shape)
+
+        return array
+
 
 class TiledShapeStMan(TiledStMan):
 
@@ -833,6 +1037,50 @@ class TiledShapeStMan(TiledStMan):
     def read_header(self, f):
         check_type_and_version(f, 'TiledShapeStMan', 1)
         # super().read_header(f)
+
+
+
+class StManColumnAipsIO(BaseCasaObject):
+
+    @classmethod
+    def read(cls, f, value_type):
+        self = cls()
+        read_int32(f)
+        version = check_type_and_version(f, 'StManColumnAipsIO', 2)
+        self.nr = read_int32(f)
+        irow = 0
+        self.values = []
+        while irow < self.nr:
+            nr = read_int32(f)
+            nr = read_int32(f)
+            self.values.append(read_as_numpy_array(f, value_type, nr))
+            irow += nr
+        self.values = np.hstack(self.values)
+        return self
+
+
+class StManAipsIO(BaseCasaObject):
+
+    @classmethod
+    def read(cls, f):
+        self = cls()
+        self.name = 'StManAipsIO'
+        return self
+
+    @with_nbytes_prefix
+    def read_header(self, f):
+        version = check_type_and_version(f, 'StManAipsIO', 2)
+        if version > 1:
+            self.name = read_string(f)
+        self.seqnr = read_int32(f)
+        self.unique_number = read_int32(f)
+        self.nrow = read_int32(f)
+        self.ncol = read_int32(f)
+        self.value_types = [TYPES[read_int32(f)] for icol in range(self.ncol)]
+        self.columns = [StManColumnAipsIO.read(f, self.value_types[icol]) for icol in range(self.ncol)]
+
+    def read_column(self, filename, seqnr, column, coldesc, colindex_in_dm):
+        return self.columns[colindex_in_dm].values
 
 
 class TiledColumnStMan(TiledStMan):
@@ -900,6 +1148,8 @@ class ColumnSet(BaseCasaObject):
                 dm_cls = TiledShapeStMan
             elif name == 'TiledColumnStMan':
                 dm_cls = TiledColumnStMan
+            elif name == 'StManAipsIO':
+                dm_cls = StManAipsIO
             else:
                 raise NotImplementedError('Data manager {0} not supported'.format(name))
 
@@ -987,7 +1237,7 @@ class ColumnDesc(BaseCasaObject):
 
         stype, sversion = read_type(f)
 
-        if not stype.startswith(('ScalarColumnDesc', 'ArrayColumnDesc')) or sversion != 1:
+        if not stype.startswith(('ScalarColumnDesc', 'ScalarRecordColumnDesc', 'ArrayColumnDesc')) or sversion != 1:
             raise NotImplementedError('Support for {0} version {1} not implemented'.format(stype, sversion))
 
         # https://github.com/casacore/casacore/blob/dbf28794ef446bbf4e6150653dbe404379a3c429/tables/Tables/BaseColDesc.cc#L285
@@ -1000,9 +1250,9 @@ class ColumnDesc(BaseCasaObject):
         self.value_type = TYPES[read_int32(f)]
 
         self.option = read_int32(f)
-        self.is_direct = self.option & 1
-        self.is_undefined = self.option & 2
-        self.is_fixed_shape = self.option & 4
+        self.is_direct = self.option & 1 == 1
+        self.is_undefined = self.option & 2 == 2
+        self.is_fixed_shape = self.option & 4 == 4
 
         self.ndim = read_int32(f)
         if self.ndim != 0:
@@ -1026,12 +1276,10 @@ class ColumnDesc(BaseCasaObject):
                 default = f.read(1)
             elif self.value_type == 'string':
                 default = read_string(f)
+            elif self.value_type == 'record':
+                default = f.read(8)
             else:
                 raise NotImplementedError(f"Can't read default value for {self.value_type}")
-
-        pos = f.tell()
-        f.seek(pos)
-
 
         return self
 
