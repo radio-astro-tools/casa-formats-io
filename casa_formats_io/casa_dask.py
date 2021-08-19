@@ -233,7 +233,7 @@ def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
                     chunkoversample = previous_chunkoversample
                     finished = True
                     break
-                previous_chunkoversample = chunkoversample
+                previous_chunkoversample = chunkoversample.copy()
             if finished:
                 break
 

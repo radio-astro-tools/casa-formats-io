@@ -989,7 +989,7 @@ class TiledCellStMan(TiledStMan):
                         chunkoversample = previous_chunkoversample
                         finished = True
                         break
-                    previous_chunkoversample = chunkoversample
+                    previous_chunkoversample = chunkoversample.copy()
                 if finished:
                     break
 
