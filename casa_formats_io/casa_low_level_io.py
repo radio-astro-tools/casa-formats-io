@@ -40,7 +40,7 @@ def _peek_no_prefix(f, length):
 class BaseCasaObject:
     def __repr__(self):
         from pprint import pformat
-        return f'{self.__class__.__name__}' + str(self.__dict__)
+        return f'{self.__class__.__name__}' + pformat(self.__dict__)
 
 
 class EndianAwareFileHandle:
@@ -75,8 +75,6 @@ def with_nbytes_prefix(func):
         if nbytes == 0:
             return
         bytes = f.read(nbytes - 4)
-        # if len(bytes) < nbytes - 4:
-        #     bytes += b'\x00' * (nbytes - 4 - len(bytes))
         b = EndianAwareFileHandle(BytesIO(bytes), f.endian, f.original_filename)
         if self:
             result = func(self, b, *args)
