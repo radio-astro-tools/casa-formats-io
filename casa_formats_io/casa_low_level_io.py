@@ -639,6 +639,7 @@ class StandardStMan(BaseCasaObject):
                     data.append(np.fromstring(f.read(coldesc.maxlen * rows_in_bucket[bucket_id]), dtype=f'S{coldesc.maxlen}'))
             elif coldesc.value_type == 'record':
                 # TODO: determine how to handle this properly
+                warnings.warn(f'Skipping column {coldesc.name} with type record')
                 data = None
             else:
                 if coldesc.is_direct or 'Scalar' in coldesc.stype:

@@ -292,17 +292,7 @@ else:
 
 EXPECTED_FAILURES = [
     'ephemerides/Sources',
-    'nrao/VLA/CalModels/3C123_P.im',
-    'nrao/VLA/CalModels/3C380_P.im',
-    'nrao/VLA/CalModels/3C138_P.im',
-    'nrao/VLA/CalModels/3C196_P.im',
-    'nrao/VLA/CalModels/3C48_P.im',
-    'nrao/VLA/CalModels/3C295_P.im',
-    'nrao/VLA/CalModels/3C286_P.im',
-    'nrao/VLA/CalModels/3C147_P.im',
     'nrao/VLA/GainCurves',
-    'nrao/VLA/standards/fluxcalibrator.data',
-    'gui/colormaps/default.tbl'
 ]
 
 
@@ -320,9 +310,21 @@ def test_casadata(table_filename):
         tb = table()
         tb.open(table_filename)
 
-        assert tt.colnames == tb.colnames()
+        expected_colnames = tb.colnames()
 
-        for colname in tt.colnames:
-            assert_equal(tt[colname], tb.getcol(colname).T)
+        # Some tables contain a Spectral_Record column that we can't read yet
+        # but that browsetable also can't read/display so we don't support this.
+        if 'Spectral_Record' in expected_colnames:
+            expected_colnames.remove('Spectral_Record')
+
+        assert tt.colnames == expected_colnames
+
+        for colname in expected_colnames:
+            try:
+                expected_data = tb.getcol(colname).T
+            except Exception:
+                # If casa can't read it, we can assume we don't need to support it
+                continue
+            assert_equal(tt[colname], expected_data)
 
         tb.close()
