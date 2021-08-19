@@ -136,9 +136,9 @@ def read_complex128(f):
     return np.complex128(read_float64(f) + 1j * read_float64(f))
 
 
-def read_string(f):
-    value = read_int32(f)
-    return f.read(int(value)).replace(b'\x00', b'').decode('ascii')
+def read_string(f, length_modifier=0):
+    value = read_int32(f) + length_modifier
+    return f.read(int(value)).decode('ascii')
 
 
 @with_nbytes_prefix
@@ -179,12 +179,12 @@ TO_TYPEREPR['uint'] = 'uInt'
 TO_TYPEREPR['string'] = 'String'
 
 
-def read_as_numpy_array(f, value_type, nelem, shape=None):
+def read_as_numpy_array(f, value_type, nelem, shape=None, length_modifier=0):
     """
     Read the next 'nelem' values as a Numpy array
     """
     if value_type == 'string':
-        array = np.array([read_string(f) for i in range(nelem)])
+        array = np.array([read_string(f, length_modifier=length_modifier) for i in range(nelem)])
         if nelem > 0:
             if max([len(s) for s in array]) < 16:  # HACK: only needed for getdesc comparisons
                 array = array.astype('<U16')
@@ -734,7 +734,7 @@ class IncrementalStMan(BaseCasaObject):
                 for off in offsets:
                     f.seek(516 + bucket_id * self.bucket_size + off)
                     if coldesc.is_direct or 'Scalar' in coldesc.stype:
-                        values.append(read_as_numpy_array(f, coldesc.value_type, 1))
+                        values.append(read_as_numpy_array(f, coldesc.value_type, 1, length_modifier=-4))
                         subshape = []
                     else:
                         offset = read_int64(f)
@@ -910,9 +910,99 @@ class TiledCellStMan(TiledStMan):
         super().read_header(f)
 
     def read_column(self, filename, seqnr, column, coldesc, colindex_in_dm):
-        from .casa_dask import image_to_dask
-        array = image_to_dask(filename, seqnr=seqnr, dm=self, is_mask=coldesc.value_type == 'bool')
-        return array.compute().reshape((1,) + array.shape)
+
+        # Need to expose the following somehow
+        target_chunksize = None
+        memmap = False
+
+        # chunkshape defines how the chunks (array subsets) are written to disk
+        chunkshape = tuple(self.default_tile_shape)
+        chunksize = np.product(chunkshape)
+
+        # the total shape defines the final output array shape
+        totalshape = self.cube_shape
+
+        # we expect that the total size of the array will be determined by finding
+        # the number of chunks along each dimension rounded up
+        totalsize = np.product(np.ceil(totalshape / chunkshape)) * chunksize
+
+        # the ratio between these tells you how many chunks must be combined
+        # to create a final stack
+        stacks = np.ceil(totalshape / chunkshape).astype(int)
+        nchunks = int(np.product(stacks))
+
+        dtype = TO_DTYPE[coldesc.value_type]
+
+        if coldesc.value_type != 'bool':
+            if self.big_endian:
+                dtype = '>' + dtype
+            else:
+                dtype = '<' + dtype
+
+        itemsize = np.dtype(dtype).itemsize
+
+        chunkshape = tuple(int(x) for x in chunkshape)
+        totalshape = tuple(int(x) for x in totalshape)
+
+        # CASA chunks are typically too small to be efficient, so we use a larger
+        # chunk size for dask and then tell CASAArrayWrapper about both the native
+        # and target chunk size.
+        # chunkshape = determine_optimal_chunkshape(totalshape, chunkshape)
+
+        if target_chunksize is None:
+            target_chunksize = 10000000
+
+        if chunksize < target_chunksize:
+
+            # Find optimal chunk - since we want to be efficient we want the new
+            # chunks to be contiguous on disk so we first try and increase the
+            # chunk size in x, then y, etc.
+
+            chunkoversample = previous_chunkoversample = [1 for i in range(len(chunkshape))]
+
+            finished = False
+            for dim in range(len(chunkshape)):
+                factors = [f for f in range(stacks[dim] + 1) if stacks[dim] % f == 0]
+                for factor in factors:
+                    chunkoversample[dim] = factor
+                    if np.product(chunkoversample) * chunksize > target_chunksize:
+                        chunkoversample = previous_chunkoversample
+                        finished = True
+                        break
+                    previous_chunkoversample = chunkoversample
+                if finished:
+                    break
+
+        else:
+
+            chunkoversample = (1,) * len(chunkshape)
+
+        chunkshape = [c * o for (c, o) in zip(chunkshape, chunkoversample)]
+
+        # Create a wrapper that takes slices and returns the appropriate CASA data
+        from .casa_dask import CASAArrayWrapper
+        img_fn = os.path.join(filename, f'table.f{seqnr}_TSM0')
+
+        wrapper = CASAArrayWrapper(img_fn, totalshape, chunkshape,
+                                   chunkoversample=chunkoversample, dtype=dtype,
+                                   itemsize=itemsize, memmap=memmap)
+
+        # Convert to a dask array
+        import uuid
+        from dask.array import from_array
+        dask_array = from_array(wrapper, name='CASA Data ' + str(uuid.uuid4()),
+                                chunks=chunkshape[::-1])
+
+        # Since the chunks may not divide the array exactly, all the chunks put
+        # together may be larger than the array, so we need to get rid of any
+        # extraneous padding.
+        final_slice = tuple([slice(dim) for dim in totalshape[::-1]])
+
+        array = dask_array[final_slice]
+
+        array = array.compute().reshape((1,) + array.shape)
+
+        return array
 
 
 class TiledShapeStMan(TiledStMan):
