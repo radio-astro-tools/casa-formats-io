@@ -92,11 +92,31 @@ def with_nbytes_prefix(func):
 
 
 def check_type_and_version(f, name, versions):
+
+    # HACK: sometimes the endian flag is not set correctly on f, and we need
+    # to figure out why. In the mean time, we can tell the actual endianness
+    # from the next byte, because we expect the next four bytes to be the length
+    # of the name string, and this won't be ridiculously long.
+
+    start = f.tell()
+    next = f.read(1)
+    if next == b'\x00':
+        actual_endian = '>'
+    else:
+        actual_endian = '<'
+    f.seek(start)
+
+    if actual_endian != f.endian:
+        warnings.warn(f'Endianness of {name} did not match endianness of file'
+                      'handle, correcting')
+        f.endian = actual_endian
+
     if np.isscalar(versions):
         versions = [versions]
     stype, sversion = read_type(f)
     if stype != name or sversion not in versions:
         raise NotImplementedError('Support for {0} version {1} not implemented'.format(stype, sversion))
+
     return sversion
 
 
@@ -481,9 +501,12 @@ class StandardStMan(BaseCasaObject):
         # SSMBase::readHeader()
         # https://github.com/casacore/casacore/blob/d6da19830fa470bdd8434fd855abe79037fda78c/tables/DataMan/SSMBase.cc#L415
 
-        check_type_and_version(f, 'StandardStMan', 3)
+        version = check_type_and_version(f, 'StandardStMan', (2, 3))
 
-        self.big_endian = f.read(1) == b'\x01'  # noqa
+        if version >= 3:
+            self.big_endian = f.read(1) == b'\x01'  # noqa
+        else:
+            self.big_endian = True
 
         self.bucket_size = read_int32(f)
         self.number_of_buckets = read_int32(f)
@@ -501,26 +524,30 @@ class StandardStMan(BaseCasaObject):
 
         # Open the main file corresponding to the data manager
         fx_filename = os.path.join(filename, f'table.f{seqnr}')
-        f = EndianAwareFileHandle(open(fx_filename, 'rb'), '<', filename)
+        f = EndianAwareFileHandle(open(fx_filename, 'rb'), '>' if self.big_endian else '<', filename)
 
         # Open indirect array file if needed (sometimes arrays are stored
         # in these files).
         if os.path.exists(fx_filename + 'i'):
-            fi = EndianAwareFileHandle(open(fx_filename + 'i', 'rb'), '<', filename)
+            fi = EndianAwareFileHandle(open(fx_filename + 'i', 'rb'), '>' if self.big_endian else '<', filename)
         else:
             fi = None
 
         # Variable length strings are stored in their own buckets which we cache
         # as needed.
         variable_string_buckets = {}
+        next_variable_string_buckets = {}
 
         def _ensure_variable_string_bucket_loaded(f, vs_bucket_id):
             if vs_bucket_id in variable_string_buckets:
-                return
+                return next_variable_string_buckets[vs_bucket_id]
             pos = f.tell()
-            f.seek(512 + self.bucket_size * vs_bucket_id + 16)
+            f.seek(512 + self.bucket_size * vs_bucket_id + 12)
+            next_vs_bucket_id = read_int32(f)
             variable_string_buckets[vs_bucket_id] = f.read(self.bucket_size - 16)
+            next_variable_string_buckets[vs_bucket_id] = next_vs_bucket_id
             f.seek(pos)
+            return next_vs_bucket_id
 
         # To read in the SSMIndex we need to pre-load the index buckets. In
         # cases where the index is split over multiple buckets, the first four
@@ -585,13 +612,13 @@ class StandardStMan(BaseCasaObject):
                         if length <= 8:
                             subdata.append(bytes[:length])
                         else:
-                            vs_bucket_id = bytes_to_int32(bytes[:4], '<')
-                            offset = bytes_to_int32(bytes[4:], '<')
-                            _ensure_variable_string_bucket_loaded(f, vs_bucket_id)
+                            vs_bucket_id = bytes_to_int32(bytes[:4], f.endian)
+                            offset = bytes_to_int32(bytes[4:], f.endian)
+                            next_vs_bucket_id =_ensure_variable_string_bucket_loaded(f, vs_bucket_id)
                             bytes = variable_string_buckets[vs_bucket_id][offset:offset + length]
                             if len(bytes) < length:
-                                _ensure_variable_string_bucket_loaded(f, vs_bucket_id + 1)
-                                bytes += variable_string_buckets[vs_bucket_id + 1][offset:offset + length - len(bytes)]
+                                _ensure_variable_string_bucket_loaded(f, next_vs_bucket_id)
+                                bytes += variable_string_buckets[next_vs_bucket_id][:length - len(bytes)]
                             if coldesc.ndim != 0:
                                 if coldesc.is_fixed_shape:
                                     n = np.product(coldesc.shape)
@@ -654,13 +681,6 @@ class IncrementalStMan(BaseCasaObject):
 
         # SSMBase::readHeader()
         # https://github.com/casacore/casacore/blob/d6da19830fa470bdd8434fd855abe79037fda78c/tables/DataMan/SSMBase.cc#L415
-
-        next = f.read(1)
-        if next == b'\x00':
-            f.endian = '>'
-        else:
-            f.endian = '<'
-        f.seek(0)
 
         version = check_type_and_version(f, 'IncrementalStMan', (4, 5))
 
