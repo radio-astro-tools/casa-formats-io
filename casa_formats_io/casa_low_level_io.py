@@ -1085,10 +1085,10 @@ class TiledCellStMan(TiledStMan):
 
         self.default_tile_shape = read_iposition(f)
 
-        super().read_header(f)
+        super(TiledCellStMan, self).read_header(f)
 
-    def read_column(*args, **kwargs):
-        array = super().read_column(*args, **kwargs)
+    def read_column(self, *args, **kwargs):
+        array = super(TiledCellStMan, self).read_column(*args, **kwargs)
         array = array.reshape((1,) + array.shape)
         return array
 
@@ -1104,7 +1104,7 @@ class TiledShapeStMan(TiledStMan):
     @with_nbytes_prefix
     def read_header(self, f):
         check_type_and_version(f, 'TiledShapeStMan', 1)
-        super().read_header(f)
+        super(TiledShapeStMan, self).read_header(f)
         self.default_tile_shape = read_iposition(f)
         self.number_used_row_map = read_int32(f)
 
@@ -1202,7 +1202,7 @@ class TiledColumnStMan(TiledStMan):
     def read_header(self, f):
         check_type_and_version(f, 'TiledColumnStMan', 1)
         self.default_tile_shape = read_iposition(f)
-        super().read_header(f)
+        super(TiledColumnStMan, self).read_header(f)
 
 
 class Block(BaseCasaObject):
