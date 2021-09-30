@@ -4,11 +4,30 @@ from io import BytesIO
 
 import numpy as np
 
+TYPES = ['bool', 'char', 'uchar', 'short', 'ushort', 'int', 'uint', 'float',
+         'double', 'complex', 'dcomplex', 'string', 'table', 'arraybool',
+         'arraychar', 'arrayuchar', 'arrayshort', 'arrayushort', 'arrayint',
+         'arrayuint', 'arrayfloat', 'arraydouble', 'arraycomplex',
+         'arraydcomplex', 'arraystr', 'record', 'other']
+
 
 class BaseCasaObject:
     def __repr__(self):
         from pprint import pformat
         return f'{self.__class__.__name__}' + pformat(self.__dict__)
+
+
+class Block(BaseCasaObject):
+
+    @classmethod
+    def read(cls, f, func):
+        self = cls()
+        self.nr = read_int32(f)
+        self.name = read_string(f)
+        self.version = read_int32(f)
+        self.size = read_int32(f)
+        self.elements = [func(f) for i in range(self.size)]
+        return self
 
 
 class EndianAwareFileHandle:
@@ -209,3 +228,19 @@ def read_type(f):
     tp = read_string(f)
     version = read_int32(f)
     return tp, version
+
+
+@with_nbytes_prefix
+def read_mapping(f, key_reader, value_reader):
+    check_type_and_version(f, 'SimpleOrderedMap', 1)
+    pos = f.tell()
+    f.seek(pos)
+    read_int32(f)  # ignored
+    nr = read_int32(f)
+    read_int32(f)  # ignored
+    m = {}
+    for i in range(nr):
+        key = key_reader(f)
+        value = value_reader(f)
+        m[key] = value
+    return m

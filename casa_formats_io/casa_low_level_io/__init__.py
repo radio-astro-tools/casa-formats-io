@@ -1,1 +1,2 @@
-from .casa_low_level_io import *
+from .casa_functions import getdminfo, getdesc  # noqa
+from .table import Table  # noqa

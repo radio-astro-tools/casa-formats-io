@@ -8,8 +8,10 @@ from numpy.testing import assert_equal
 from astropy.table import Table as AstropyTable
 from pprint import pformat
 
-from ..casa_low_level_io import TiledCellStMan, getdminfo, getdesc, EndianAwareFileHandle, Table
-# from ...tests.test_casafuncs import make_casa_testimage
+from ..data_managers import TiledCellStMan
+from ..casa_functions import getdminfo, getdesc
+from ..core import EndianAwareFileHandle
+from ..table import Table
 
 try:
     from casatools import table, image

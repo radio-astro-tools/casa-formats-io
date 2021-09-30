@@ -2,31 +2,238 @@
 # functions for reading metadata about .image files.
 
 import os
+import struct
 import warnings
 from io import BytesIO
 from collections import OrderedDict
+from textwrap import indent
 
 import numpy as np
 
 from astropy.table import Table as AstropyTable
 
-from .core import (BaseCasaObject, check_type_and_version, with_nbytes_prefix,
-                   read_int32, read_array, read_string, read_iposition,
-                   read_float32, read_float64, read_complex64, read_complex128,
-                   EndianAwareFileHandle, read_int64, read_as_numpy_array,
-                   read_bool, bytes_to_int32, read_type, TO_DTYPE)
-
 __all__ = ['getdminfo', 'getdesc', 'Table']
-
-TYPES = ['bool', 'char', 'uchar', 'short', 'ushort', 'int', 'uint', 'float',
-         'double', 'complex', 'dcomplex', 'string', 'table', 'arraybool',
-         'arraychar', 'arrayuchar', 'arrayshort', 'arrayushort', 'arrayint',
-         'arrayuint', 'arrayfloat', 'arraydouble', 'arraycomplex',
-         'arraydcomplex', 'arraystr', 'record', 'other']
 
 
 class VariableShapeArrayList(list):
     pass
+
+
+def _peek(f, length):
+    # Internal function used for debugging - show the next N bytes (and the
+    # previous 8)
+    pos = f.tell()
+    f.seek(pos - 8)
+    print(repr(f.read(8)), '  ', repr(f.read(length)))
+    f.seek(pos)
+
+
+def _peek_no_prefix(f, length):
+    # Internal function used for debugging - show the next N bytes
+    pos = f.tell()
+    print(repr(f.read(length)))
+    f.seek(pos)
+
+
+class BaseCasaObject:
+    def __repr__(self):
+        from pprint import pformat
+        return f'{self.__class__.__name__}' + pformat(self.__dict__)
+
+
+class EndianAwareFileHandle:
+
+    def __init__(self, file_handle, endian, original_filename):
+        self.file_handle = file_handle
+        self.endian = endian
+        self.original_filename = original_filename
+
+    def read(self, n=None):
+        return self.file_handle.read(n)
+
+    def tell(self):
+        return self.file_handle.tell()
+
+    def seek(self, n):
+        return self.file_handle.seek(n)
+
+
+def with_nbytes_prefix(func):
+    def wrapper(*args):
+        if hasattr(args[0], 'tell'):
+            self = None
+            f = args[0]
+            args = args[1:]
+        else:
+            self = args[0]
+            f = args[1]
+            args = args[2:]
+        start = f.tell()
+        nbytes = int(read_int32(f))
+        if nbytes == 0:
+            return
+        bytes = f.read(nbytes - 4)
+        b = EndianAwareFileHandle(BytesIO(bytes), f.endian, f.original_filename)
+        if self:
+            result = func(self, b, *args)
+        else:
+            result = func(b, *args)
+        end = f.tell()
+        # if end - start != nbytes:
+        #     raise IOError('Function {0} read {1} bytes instead of {2}'
+        #                   .format(func, end - start, nbytes))
+        return result
+    return wrapper
+
+
+
+def check_type_and_version(f, name, versions):
+
+    # HACK: sometimes the endian flag is not set correctly on f, and we need
+    # to figure out why. In the mean time, we can tell the actual endianness
+    # from the next byte, because we expect the next four bytes to be the length
+    # of the name string, and this won't be ridiculously long.
+
+    start = f.tell()
+    next = f.read(1)
+    if next == b'\x00':
+        actual_endian = '>'
+    else:
+        actual_endian = '<'
+    f.seek(start)
+
+    if actual_endian != f.endian:
+        warnings.warn(f'Endianness of {name} did not match endianness of file'
+                      'handle, correcting')
+        f.endian = actual_endian
+
+    if np.isscalar(versions):
+        versions = [versions]
+    stype, sversion = read_type(f)
+    if stype != name or sversion not in versions:
+        raise NotImplementedError('Support for {0} version {1} not implemented'.format(stype, sversion))
+
+    return sversion
+
+
+def read_bool(f):
+    return f.read(1) == b'\x01'
+
+
+def read_int16(f):
+    return np.int16(struct.unpack(f.endian + 'h', f.read(2))[0])
+
+
+def read_int32(f):
+    return np.int32(struct.unpack(f.endian + 'i', f.read(4))[0])
+
+
+def bytes_to_int32(bytes, endian):
+    return np.int32(struct.unpack(endian + 'i', bytes)[0])
+
+
+def read_int64(f):
+    return np.int64(struct.unpack(f.endian + 'q', f.read(8))[0])
+
+
+def read_float32(f):
+    return np.float32(struct.unpack(f.endian + 'f', f.read(4))[0])
+
+
+def read_float64(f):
+    return np.float64(struct.unpack(f.endian + 'd', f.read(8))[0])
+
+
+def read_complex64(f):
+    return np.complex64(read_float32(f) + 1j * read_float32(f))
+
+
+def read_complex128(f):
+    return np.complex128(read_float64(f) + 1j * read_float64(f))
+
+
+def read_string(f, length_modifier=0):
+    value = read_int32(f) + length_modifier
+    return f.read(int(value)).replace(b'\x00', b'').decode('ascii')
+
+
+@with_nbytes_prefix
+def read_iposition(f):
+    check_type_and_version(f, 'IPosition', 1)
+    nelem = read_int32(f)
+    return np.array([read_int32(f) for i in range(nelem)], dtype=int)
+
+
+ARRAY_ITEM_READERS = {
+    'float': ('float', read_float32, np.float32),
+    'double': ('double', read_float64, np.float64),
+    'dcomplex': ('void', read_complex128, np.complex128),
+    'string': ('String', read_string, '<U16'),
+    'int': ('Int', read_int32, int),
+    'uint': ('uInt', read_int32, int)
+}
+
+
+TO_DTYPE = {}
+TO_DTYPE['dcomplex'] = 'c16'
+TO_DTYPE['complex'] = 'c8'
+TO_DTYPE['double'] = 'f8'
+TO_DTYPE['float'] = 'f4'
+TO_DTYPE['int'] = 'i4'
+TO_DTYPE['uint'] = 'u4'
+TO_DTYPE['short'] = 'i2'
+TO_DTYPE['string'] = '<U16'
+TO_DTYPE['bool'] = 'bool'
+TO_DTYPE['record'] = 'O'
+
+TO_TYPEREPR = {}
+TO_TYPEREPR['dcomplex'] = 'void'
+TO_TYPEREPR['double'] = 'double'
+TO_TYPEREPR['float'] = 'float'
+TO_TYPEREPR['int'] = 'Int'
+TO_TYPEREPR['uint'] = 'uInt'
+TO_TYPEREPR['string'] = 'String'
+
+
+def read_as_numpy_array(f, value_type, nelem, shape=None, length_modifier=0):
+    """
+    Read the next 'nelem' values as a Numpy array
+    """
+    if value_type == 'string':
+        array = np.array([read_string(f, length_modifier=length_modifier) for i in range(nelem)])
+        if nelem > 0:
+            if max([len(s) for s in array]) < 16:  # HACK: only needed for getdesc comparisons
+                array = array.astype('<U16')
+    elif value_type == 'bool':
+        array = np.unpackbits(np.frombuffer(f.read(int(np.ceil(nelem / 8)) * 8), dtype='uint8'), bitorder='little').astype(bool)[:nelem]
+    elif value_type in TO_DTYPE:
+        dtype = np.dtype(f.endian + TO_DTYPE[value_type])
+        array = np.frombuffer(f.read(int(nelem * dtype.itemsize)), dtype=dtype)
+    else:
+        raise NotImplementedError(f"Can't read in data of type {value_type}")
+    if shape is not None:
+        array = array.reshape(shape)
+    return array
+
+
+@with_nbytes_prefix
+def read_array(f, arraytype):
+
+    typerepr = TO_TYPEREPR[arraytype]
+
+    check_type_and_version(f, f'Array<{typerepr}>', 3)
+
+    ndim = read_int32(f)
+    shape = [read_int32(f) for i in range(ndim)]
+    size = read_int32(f)
+
+    return read_as_numpy_array(f, arraytype, size, shape=shape)
+
+
+def read_type(f):
+    tp = read_string(f)
+    version = read_int32(f)
+    return tp, version
 
 
 class Record(BaseCasaObject):
@@ -52,6 +259,8 @@ class RecordDesc(BaseCasaObject):
 
         nrec = read_int32(f)
 
+        records = OrderedDict()
+
         self.names = []
         self.types = []
 
@@ -62,7 +271,7 @@ class RecordDesc(BaseCasaObject):
             # why we don't do anything with the values we read in.
             if self.types[-1] in ('bool', 'int', 'uint', 'float', 'double',
                                   'complex', 'dcomplex', 'string'):
-                comment = read_string(f)  # noqa
+                comment = read_string(f)
             elif self.types[-1] == 'table':
                 f.read(8)
             elif self.types[-1].startswith('array'):
@@ -72,10 +281,10 @@ class RecordDesc(BaseCasaObject):
                 RecordDesc.read(f)
                 read_int32(f)
             else:
-                raise NotImplementedError("Support for type {0} in RecordDesc "
-                                          "not implemented".format(self.types[-1]))
+                raise NotImplementedError("Support for type {0} in RecordDesc not implemented".format(rectype))
 
         return self
+
 
 
 class TableRecord(BaseCasaObject):
@@ -272,7 +481,7 @@ class Table(BaseCasaObject):
 
         self = cls()
 
-        check_type_and_version(f, 'Table', 2)
+        version = check_type_and_version(f, 'Table', 2)
 
         self.nrow = read_int32(f)
         self.fmt = read_int32(f)  # noqa
@@ -447,7 +656,7 @@ class StandardStMan(BaseCasaObject):
                         else:
                             vs_bucket_id = bytes_to_int32(bytes[:4], f.endian)
                             offset = bytes_to_int32(bytes[4:], f.endian)
-                            next_vs_bucket_id = _ensure_variable_string_bucket_loaded(f, vs_bucket_id)
+                            next_vs_bucket_id =_ensure_variable_string_bucket_loaded(f, vs_bucket_id)
                             bytes = variable_string_buckets[vs_bucket_id][offset:offset + length]
                             if len(bytes) < length:
                                 _ensure_variable_string_bucket_loaded(f, next_vs_bucket_id)
@@ -461,9 +670,9 @@ class StandardStMan(BaseCasaObject):
                                     pos = 12
                                 strings = []
                                 for i in range(n):
-                                    length = bytes_to_int32(bytes[pos:pos + 4], '>')
-                                    strings.append(bytes[pos + 4: pos + 4 + length])
-                                    pos += 4 + length
+                                    l = bytes_to_int32(bytes[pos:pos + 4], '>')
+                                    strings.append(bytes[pos + 4: pos + 4 + l])
+                                    pos += 4 + l
                                 if coldesc.is_fixed_shape:
                                     strings = np.reshape(strings, coldesc.shape)
                                 bytes = strings
@@ -497,6 +706,7 @@ class StandardStMan(BaseCasaObject):
                 return np.hstack(data)
         else:
             return None
+
 
 
 class IncrementalStMan(BaseCasaObject):
@@ -620,6 +830,7 @@ class IncrementalStMan(BaseCasaObject):
             return np.array([], dtype=TO_DTYPE[coldesc.value_type])
 
 
+
 @with_nbytes_prefix
 def read_mapping(f, key_reader, value_reader):
     check_type_and_version(f, 'SimpleOrderedMap', 1)
@@ -673,6 +884,7 @@ class ISMIndex(BaseCasaObject):
 
 
 class TiledStMan(BaseCasaObject):
+
 
     @with_nbytes_prefix
     def read_header(self, f):
@@ -825,7 +1037,7 @@ class TiledStMan(BaseCasaObject):
         chunkshape = [c * o for (c, o) in zip(chunkshape, chunkoversample)]
 
         # Create a wrapper that takes slices and returns the appropriate CASA data
-        from casa_formats_io.casa_dask import CASAArrayWrapper
+        from .casa_dask import CASAArrayWrapper
 
         img_fn = os.path.join(filename, f'table.f{seqnr}_TSM{tsm_index}')
 
@@ -935,7 +1147,7 @@ class StManColumnAipsIO(BaseCasaObject):
     def read(cls, f, value_type):
         self = cls()
         read_int32(f)
-        check_type_and_version(f, 'StManColumnAipsIO', 2)
+        version = check_type_and_version(f, 'StManColumnAipsIO', 2)
         self.nr = read_int32(f)
         irow = 0
         self.values = []
@@ -1149,28 +1361,29 @@ class ColumnDesc(BaseCasaObject):
         self.maxlen = read_int32(f)
         self.keywords = TableRecord.read(f)
 
-        read_int32(f)
+        version = read_int32(f)
         if 'ArrayColumnDesc' in stype:
-            sw = f.read(1)  # noqa
+            sw = f.read(1)
         else:
             if self.value_type in ('ushort', 'short'):
-                self._default = f.read(2)
+                default = f.read(2)
             elif self.value_type in ('uint', 'int', 'float'):
-                self._default = f.read(4)
+                default = f.read(4)
             elif self.value_type in ('double', 'complex'):
-                self._default = f.read(8)
+                default = f.read(8)
             elif self.value_type in ('dcomplex'):
-                self._default = f.read(16)
+                default = f.read(16)
             elif self.value_type == 'bool':
-                self._default = f.read(1)
+                default = f.read(1)
             elif self.value_type == 'string':
-                self._default = read_string(f)
+                default = read_string(f)
             elif self.value_type == 'record':
-                self._default = f.read(8)
+                default = f.read(8)
             else:
                 raise NotImplementedError(f"Can't read default value for {self.value_type}")
 
         return self
+
 
 
 def getdminfo(filename, endian='>'):
@@ -1214,15 +1427,16 @@ def getdminfo(filename, endian='>'):
         dminfo['SPEC']['MAXIMUMCACHESIZE'] = dm.max_cache_size
         dminfo['SPEC']['MaxCacheSize'] = dm.max_cache_size
 
+
         bucket = dminfo['SPEC']['HYPERCUBES'] = {}
         bucket = dminfo['SPEC']['HYPERCUBES']['*1'] = {}
+
 
         bucket['CubeShape'] = bucket['CellShape'] = dm.cube_shape
         bucket['TileShape'] = dm.tile_shape
         bucket['ID'] = {}
         bucket['BucketSize'] = int(dm.total_cube_size /
-                                   np.product(np.ceil(bucket['CubeShape']
-                                              / bucket['TileShape'])))
+                                    np.product(np.ceil(bucket['CubeShape'] / bucket['TileShape'])))
 
         dminfo['TYPE'] = 'TiledCellStMan'
 
@@ -1242,12 +1456,12 @@ def getdesc(filename, endian='>'):
     desc = {}
     for column in coldesc:
         desc[column.name] = {'comment': column.comment,
-                             'dataManagerGroup': table.column_set.data_managers[0].name,
-                             'dataManagerType': column.data_manager_type,
-                             'keywords': column.keywords.as_dict(),
-                             'maxlen': column.maxlen,
-                             'option': column.option,
-                             'valueType': column.value_type}
+                            'dataManagerGroup': table.column_set.data_managers[0].name,
+                            'dataManagerType': column.data_manager_type,
+                            'keywords': column.keywords.as_dict(),
+                            'maxlen': column.maxlen,
+                            'option': column.option,
+                            'valueType': column.value_type}
     desc['_keywords_'] = table.desc.keywords.as_dict()
     desc['_private_keywords_'] = table.desc.private_keywords.as_dict()
     desc['_define_hypercolumn_'] = {}
