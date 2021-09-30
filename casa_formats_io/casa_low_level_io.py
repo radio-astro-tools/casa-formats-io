@@ -14,12 +14,6 @@ from astropy.table import Table as AstropyTable
 
 __all__ = ['getdminfo', 'getdesc', 'Table']
 
-TYPES = ['bool', 'char', 'uchar', 'short', 'ushort', 'int', 'uint', 'float',
-         'double', 'complex', 'dcomplex', 'string', 'table', 'arraybool',
-         'arraychar', 'arrayuchar', 'arrayshort', 'arrayushort', 'arrayint',
-         'arrayuint', 'arrayfloat', 'arraydouble', 'arraycomplex',
-         'arraydcomplex', 'arraystr', 'record', 'other']
-
 
 class VariableShapeArrayList(list):
     pass
