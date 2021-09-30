@@ -16,10 +16,10 @@ __all__ = ['image_to_dask']
 
 
 def combine_chunks(array_1d, itemsize, shape, oversample):
-    if len(shape) == 3:
-        shape = tuple(shape) + (1,)
-    if len(oversample) == 3:
-        oversample = tuple(oversample) + (1,)
+    if len(shape) < 4:
+        shape = tuple(shape) + (1,) * (4 - len(shape))
+    if len(oversample) < 4:
+        oversample = tuple(oversample) + (1,) * (4 - len(oversample))
     native_shape = [s // o for (s, o) in zip(shape, oversample)]
     return _combine_chunks(np.ascontiguousarray(array_1d), itemsize, *native_shape[::-1], *oversample[::-1])
 

@@ -21,6 +21,10 @@ TYPES = ['bool', 'char', 'uchar', 'short', 'ushort', 'int', 'uint', 'float',
          'arraydcomplex', 'arraystr', 'record', 'other']
 
 
+class VariableShapeArrayList(list):
+    pass
+
+
 def _peek(f, length):
     # Internal function used for debugging - show the next N bytes (and the
     # previous 8)
@@ -391,7 +395,7 @@ class Table(BaseCasaObject):
 
         return table
 
-    def read_as_astropy_table(self):
+    def as_astropy_tables(self):
 
         # We now loop over columns and read the relevant data from each bucket.
 
@@ -401,7 +405,7 @@ class Table(BaseCasaObject):
 
         coldesc = self.desc.column_description
 
-        tbl = AstropyTable()
+        table_columns = OrderedDict()
 
         for colindex in range(len(coldesc)):
 
@@ -419,18 +423,63 @@ class Table(BaseCasaObject):
                 if column.data.seqnr == seqnr:
                     colindex_in_dm += 1
 
-            value_type = coldesc[colindex].value_type
             colname = coldesc[colindex].name
 
             if hasattr(dm, 'read_column'):
                 coldata = dm.read_column(self._filename, seqnr, self.column_set.columns[colindex], coldesc[colindex], colindex_in_dm)
                 if coldata is not None:
-                    tbl[colname] = coldata
+                    table_columns[colname] = coldata
             else:
                 warnings.warn(f'Skipping column {colname} with data manager {dm.__class__.__name__}')
 
-        return tbl
+        # Some columns have variable shape - in this case we split the output
+        # into several tables. We keep track of all the locations where the
+        # shape changes and later combine that into a single list.
 
+        split = None
+        last_rows = {}
+
+        for colname, data in table_columns.items():
+            if isinstance(data, VariableShapeArrayList):
+                if split is None:
+                    split = set()
+                split |= set([array.shape[0] for array in data])
+                last_rows[colname] = np.cumsum([array.shape[0] for array in data])
+
+        if split is None:
+            return [AstropyTable(data=table_columns)]
+        else:
+            # Convert to a sorted list
+            split = sorted(split)
+
+            tables = []
+
+            start = 0
+            for end in split:
+
+                columns_sub = OrderedDict()
+                for colname, data in table_columns.items():
+                    if isinstance(data, VariableShapeArrayList):
+                        if len(data) == 0:
+                            continue
+                        index = np.searchsorted(last_rows[colname], start, side='right')
+                        if index == 0:
+                            offset = 0
+                        else:
+                            offset = last_rows[colname][index - 1]
+                        columns_sub[colname] = data[index][start - offset:end - offset]
+                    else:
+                        columns_sub[colname] = data[start:end]
+
+                tables.append(AstropyTable(data=columns_sub))
+
+                start = end
+
+            # For MS files, each table will likely have a unique DATA_DESC_ID so
+            # for that special case we could have users select the required table
+            # with this, but that could happen at a higher level.
+
+            return tables
 
     @classmethod
     @with_nbytes_prefix
@@ -876,22 +925,31 @@ class TiledStMan(BaseCasaObject):
         # if self.nrfile != 1:
         #     raise ValueError("Expected nrfile to be 1, got {0}".format(self.nrfile))
 
-        # The following flag seems to control whether or not the TSM file is
-        # opened by CASA, and is probably safe to ignore here.
-        flag = bool(f.read(1))
+        self.max_tsm_index = 0
 
-        # The following two values are unknown, but are likely relevant when there
-        # are more that one field in the image.
+        for tsm_index in range(self.nrfile):
 
-        mode = read_int32(f)
-        unknown = read_int32(f)  # 0
+            # The following flag seems to control whether or not the TSM file is
+            # opened by CASA, and is probably safe to ignore here.
+            flag = bool(f.read(1) == b'\x01')
 
-        if mode == 1:
-            self.total_cube_size = read_int32(f)
-        elif mode == 2:
-            self.total_cube_size = read_int64(f)
-        else:
-            raise ValueError('Unexpected value {0} at position {1}'.format(mode, f.tell() - 8))
+            if not flag:
+                continue
+
+            self.max_tsm_index = tsm_index
+
+            # The following two values are unknown, but are likely relevant when there
+            # are more that one field in the image.
+
+            mode = read_int32(f)
+            unknown = read_int32(f)  # 0
+
+            if mode == 1:
+                self.total_cube_size = read_int32(f)
+            elif mode == 2:
+                self.total_cube_size = read_int64(f)
+            else:
+                raise ValueError('Unexpected value {0} at position {1}'.format(mode, f.tell() - 8))
 
         unknown = read_int32(f)  # 1
         unknown = read_int32(f)  # 1
@@ -908,48 +966,33 @@ class TiledStMan(BaseCasaObject):
         unknown = read_int32(f)  # noqa
         unknown = read_int32(f)  # noqa
 
-
-class TiledCellStMan(TiledStMan):
-
-    @classmethod
-    def read(cls, f):
-        self = cls()
-        self.name = 'TiledCellStMan'
-        return self
-
-    @with_nbytes_prefix
-    def read_header(self, f):
-
-        # The code in this function corresponds to TiledStMan::headerFileGet
-        # https://github.com/casacore/casacore/blob/75b358be47039250e03e5042210cbc60beaaf6e4/tables/DataMan/TiledStMan.cc#L1086
-
-        check_type_and_version(f, 'TiledCellStMan', 1)
-
-        self.default_tile_shape = read_iposition(f)
-
-        super().read_header(f)
-
     def read_column(self, filename, seqnr, column, coldesc, colindex_in_dm):
+
+        # chunkshape defines how the chunks (array subsets) are written to disk
+        chunkshape = tuple(self.default_tile_shape)
+
+        # the total shape defines the final output array shape
+        if len(self.cube_shape) > 0:
+            totalshape = self.cube_shape
+        else:
+            # FIXME: below is not the right default!
+            totalshape = np.array(chunkshape)
+
+        return self._read_tsm_file(filename, seqnr, coldesc, totalshape, chunkshape)
+
+    def _read_tsm_file(self, filename, seqnr, coldesc, totalshape, chunkshape, tsm_index=0):
+
+        totalshape = np.asarray(totalshape)
+        chunkshape = np.asarray(chunkshape)
+        chunksize = np.product(chunkshape)
 
         # Need to expose the following somehow
         target_chunksize = None
         memmap = False
 
-        # chunkshape defines how the chunks (array subsets) are written to disk
-        chunkshape = tuple(self.default_tile_shape)
-        chunksize = np.product(chunkshape)
-
-        # the total shape defines the final output array shape
-        totalshape = self.cube_shape
-
-        # we expect that the total size of the array will be determined by finding
-        # the number of chunks along each dimension rounded up
-        totalsize = np.product(np.ceil(totalshape / chunkshape)) * chunksize
-
         # the ratio between these tells you how many chunks must be combined
-        # to create a final stack
+        # to create a final stack along each dimension
         stacks = np.ceil(totalshape / chunkshape).astype(int)
-        nchunks = int(np.product(stacks))
 
         dtype = TO_DTYPE[coldesc.value_type]
 
@@ -1001,7 +1044,8 @@ class TiledCellStMan(TiledStMan):
 
         # Create a wrapper that takes slices and returns the appropriate CASA data
         from .casa_dask import CASAArrayWrapper
-        img_fn = os.path.join(filename, f'table.f{seqnr}_TSM0')
+
+        img_fn = os.path.join(filename, f'table.f{seqnr}_TSM{tsm_index}')
 
         wrapper = CASAArrayWrapper(img_fn, totalshape, chunkshape,
                                    chunkoversample=chunkoversample, dtype=dtype,
@@ -1020,8 +1064,32 @@ class TiledCellStMan(TiledStMan):
 
         array = dask_array[final_slice]
 
-        array = array.compute().reshape((1,) + array.shape)
+        return array.compute()
 
+
+class TiledCellStMan(TiledStMan):
+
+    @classmethod
+    def read(cls, f):
+        self = cls()
+        self.name = 'TiledCellStMan'
+        return self
+
+    @with_nbytes_prefix
+    def read_header(self, f):
+
+        # The code in this function corresponds to TiledStMan::headerFileGet
+        # https://github.com/casacore/casacore/blob/75b358be47039250e03e5042210cbc60beaaf6e4/tables/DataMan/TiledStMan.cc#L1086
+
+        check_type_and_version(f, 'TiledCellStMan', 1)
+
+        self.default_tile_shape = read_iposition(f)
+
+        super(TiledCellStMan, self).read_header(f)
+
+    def read_column(self, *args, **kwargs):
+        array = super(TiledCellStMan, self).read_column(*args, **kwargs)
+        array = array.reshape((1,) + array.shape)
         return array
 
 
@@ -1036,8 +1104,47 @@ class TiledShapeStMan(TiledStMan):
     @with_nbytes_prefix
     def read_header(self, f):
         check_type_and_version(f, 'TiledShapeStMan', 1)
-        # super().read_header(f)
+        super(TiledShapeStMan, self).read_header(f)
+        self.default_tile_shape = read_iposition(f)
+        self.number_used_row_map = read_int32(f)
 
+        # The data might be split into multiple cubes (TSM<index> files). The
+        # following three values help us piece these together into the main
+        # hypercube. Each of the lists has length n_cubes where n_cubes is the
+        # number of individual cubes.
+
+        # The index of the last row in the final hypercube in each section. For
+        # instance, [9, 19] means that the ten first rows (0-9) are in the first
+        # subcube and the second set of ten rows (10-19) are in the second cube.
+        self.last_row_abs = Block.read(f, read_int32)
+
+        # The index of the cube in which the rows are stored - this is the value
+        # used as a suffix in the TSM filename, e.g. TSM2
+        self.cube_index = Block.read(f, read_int32)
+
+        # The index of the last row of the subcube.
+        self.last_row_sub = Block.read(f, read_int32)
+
+    def read_column(self, filename, seqnr, column, coldesc, colindex_in_dm):
+
+        # chunkshape defines how the chunks (array subsets) are written to disk
+        chunkshape = list(self.default_tile_shape)
+
+        # TODO: for now we assume that the cubes are in the right order in
+        # self.cube_index and that self.last_row_abs is monotically increasing.
+        # This assumption might actually be ok but we should check.
+
+        arrays = []
+        for tsm_index, row_index in zip(self.cube_index.elements, self.last_row_sub.elements):
+            subcubeshape = chunkshape[:-1] + [row_index + 1]
+            subcubeshape[1] *= tsm_index
+            subchunkshape = chunkshape.copy()
+            subchunkshape[1] *= tsm_index
+            if subchunkshape[-1] > subcubeshape[-1]:
+                subchunkshape[-1] = subcubeshape[-1]
+            arrays.append(self._read_tsm_file(filename, seqnr, coldesc, subcubeshape, subchunkshape, tsm_index=tsm_index))
+
+        return VariableShapeArrayList(arrays)
 
 
 class StManColumnAipsIO(BaseCasaObject):
@@ -1095,7 +1202,7 @@ class TiledColumnStMan(TiledStMan):
     def read_header(self, f):
         check_type_and_version(f, 'TiledColumnStMan', 1)
         self.default_tile_shape = read_iposition(f)
-        super().read_header(f)
+        super(TiledColumnStMan, self).read_header(f)
 
 
 class Block(BaseCasaObject):

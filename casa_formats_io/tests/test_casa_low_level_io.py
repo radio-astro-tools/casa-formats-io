@@ -142,7 +142,7 @@ def test_generic_table_read(tmp_path):
     assert pformat(actual_getdminfo) == pformat(reference_getdminfo)
 
     tnew = Table.read(filename_casa, endian='<')
-    tnew.read_as_astropy_table()
+    tnew.as_astropy_tables()
 
 
 def test_getdesc_floatarray():
@@ -185,7 +185,7 @@ def test_logtable(tmp_path):
 
     tnew = Table.read(logtable, endian='<')
 
-    tnew.read_as_astropy_table()
+    tnew.as_astropy_tables()
 
 
 @pytest.mark.parametrize('tablename', ('.',
@@ -214,17 +214,14 @@ def test_ms_tables(tablename):
         pytest.xfail()
 
     t = Table.read(table_filename, endian='<')
-    tt = t.read_as_astropy_table()
+    tt = t.as_astropy_tables()
 
     if CASATOOLS_INSTALLED:
 
         tb = table()
         tb.open(table_filename)
 
-        if tablename != '.':
-            assert tt.colnames == tb.colnames()
-
-        for colname in tt.colnames:
+        for colname in tb.colnames():
 
             # CASA has issues reading this in
             if tablename == 'SOURCE' and colname in ['POSITION', 'TRANSITION']:
@@ -235,15 +232,17 @@ def test_ms_tables(tablename):
                                                               'RESOLUTION', 'ASSOC_SPW_ID', 'ASSOC_NATURE']:
                 continue
 
-            # Wrong endian
-            if tablename == 'SOURCE' and colname in ['REST_FREQUENCY', 'SYSVEL']:
+            # Column is empty? browsetable also has issues reading this properly
+            if tablename == '.' and colname in ['FLAG_CATEGORY']:
                 continue
 
-            # Long string split over two buckets
-            if tablename == 'FLAG_CMD' and colname in ['COMMAND']:
-                continue
-
-            assert_equal(tt[colname], tb.getcol(colname).T)
+            if tablename == '.':
+                # Check two main sections of table, which have different shapes for
+                # some of the columns
+                assert_equal(tt[0][colname], tb.getcol(colname, startrow=0, nrow=10).T)
+                assert_equal(tt[1][colname], tb.getcol(colname, startrow=10, nrow=10).T)
+            else:
+                assert_equal(tt[0][colname], tb.getcol(colname).T)
 
         tb.close()
 
@@ -271,7 +270,7 @@ def test_vector_columns(tmp_path):
     tb.close()
 
     tnew = Table.read(filename_casa, endian='<')
-    t2 = tnew.read_as_astropy_table()
+    t2 = tnew.as_astropy_tables()[0]
 
     assert_equal(t['short'], t2['short'])
     assert_equal(t['int'], t2['int'])
@@ -302,7 +301,7 @@ def test_casadata(table_filename):
         pytest.xfail()
 
     t = Table.read(table_filename, endian='<')
-    tt = t.read_as_astropy_table()
+    tt = t.as_astropy_tables()[0]
 
     if CASATOOLS_INSTALLED:
 
