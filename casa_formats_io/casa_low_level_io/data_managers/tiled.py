@@ -78,28 +78,34 @@ class TiledStMan(BaseCasaObject):
                 raise ValueError('Unexpected value {0} at position {1}'.format(mode, f.tell() - 8))
 
         unknown = read_int32(f)  # 1
-        unknown = read_int32(f)  # 1
 
-        Record.read(f)
+        self.cube_shapes = []
+        self.tile_shapes = []
 
-        flag = f.read(1)  # noqa
+        for tsm_index in range(self.nrfile):
 
-        ndim2 = read_int32(f)  # noqa
+            unknown = read_int32(f)  # 1
 
-        self.cube_shape = read_iposition(f)
-        self.tile_shape = read_iposition(f)
+            Record.read(f)
 
-        unknown = read_int32(f)  # noqa
-        unknown = read_int32(f)  # noqa
+            flag = f.read(1)  # noqa
+
+            ndim2 = read_int32(f)  # noqa
+
+            self.cube_shapes.append(read_iposition(f))
+            self.tile_shapes.append(read_iposition(f))
+
+            unknown = read_int32(f)  # noqa
+            unknown = read_int32(f)  # noqa
 
     def read_column(self, filename, seqnr, column, coldesc, colindex_in_dm):
 
         # chunkshape defines how the chunks (array subsets) are written to disk
-        chunkshape = tuple(self.default_tile_shape)
+        chunkshape = tuple(self.tile_shapes[0])
 
         # the total shape defines the final output array shape
-        if len(self.cube_shape) > 0:
-            totalshape = self.cube_shape
+        if len(self.cube_shapes[0]) > 0:
+            totalshape = self.cube_shapes[0]
         else:
             # FIXME: below is not the right default!
             totalshape = np.array(chunkshape)
@@ -114,7 +120,7 @@ class TiledStMan(BaseCasaObject):
 
         # Need to expose the following somehow
         target_chunksize = None
-        memmap = False
+        memmap = True
 
         # the ratio between these tells you how many chunks must be combined
         # to create a final stack along each dimension
@@ -181,16 +187,14 @@ class TiledStMan(BaseCasaObject):
         import uuid
         from dask.array import from_array
         dask_array = from_array(wrapper, name='CASA Data ' + str(uuid.uuid4()),
-                                chunks=chunkshape[::-1])
+                                chunks=chunkshape[::-1], meta=np.array([[[]]], dtype=dtype))
 
         # Since the chunks may not divide the array exactly, all the chunks put
         # together may be larger than the array, so we need to get rid of any
         # extraneous padding.
         final_slice = tuple([slice(dim) for dim in totalshape[::-1]])
 
-        array = dask_array[final_slice]
-
-        return array.compute()
+        return dask_array[final_slice]
 
 
 class TiledCellStMan(TiledStMan):
@@ -260,15 +264,22 @@ class TiledShapeStMan(TiledStMan):
         # self.cube_index and that self.last_row_abs is monotically increasing.
         # This assumption might actually be ok but we should check.
 
+        position = {}
+
         arrays = []
         for tsm_index, row_index in zip(self.cube_index.elements, self.last_row_sub.elements):
-            subcubeshape = chunkshape[:-1] + [row_index + 1]
-            subcubeshape[1] *= tsm_index
-            subchunkshape = chunkshape.copy()
-            subchunkshape[1] *= tsm_index
-            if subchunkshape[-1] > subcubeshape[-1]:
-                subchunkshape[-1] = subcubeshape[-1]
+
+            if tsm_index not in position:
+                position[tsm_index] = 0
+
+            subcubeshape = self.cube_shapes[tsm_index]
+            subcubeshape[-1] = (row_index + 1 - position[tsm_index])
+            subchunkshape = self.tile_shapes[tsm_index]
+
+            # FIXME: Need to also offset to position[tsm_index]!!
             arrays.append(self._read_tsm_file(filename, seqnr, coldesc, subcubeshape, subchunkshape, tsm_index=tsm_index))
+
+            position[tsm_index] = row_index + 1
 
         return VariableShapeArrayList(arrays)
 
