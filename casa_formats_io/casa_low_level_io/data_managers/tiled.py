@@ -112,7 +112,7 @@ class TiledStMan(BaseCasaObject):
 
         return self._read_tsm_file(filename, seqnr, coldesc, totalshape, chunkshape)
 
-    def _read_tsm_file(self, filename, seqnr, coldesc, totalshape, chunkshape, tsm_index=0):
+    def _read_tsm_file(self, filename, seqnr, coldesc, totalshape, chunkshape, tsm_index=0, offset=0):
 
         totalshape = np.asarray(totalshape)
         chunkshape = np.asarray(chunkshape)
@@ -181,7 +181,7 @@ class TiledStMan(BaseCasaObject):
 
         wrapper = CASAArrayWrapper(img_fn, totalshape, chunkshape,
                                    chunkoversample=chunkoversample, dtype=dtype,
-                                   itemsize=itemsize, memmap=memmap)
+                                   itemsize=itemsize, memmap=memmap, offset=offset)
 
         # Convert to a dask array
         import uuid
@@ -277,7 +277,7 @@ class TiledShapeStMan(TiledStMan):
             subchunkshape = self.tile_shapes[tsm_index]
 
             # FIXME: Need to also offset to position[tsm_index]!!
-            arrays.append(self._read_tsm_file(filename, seqnr, coldesc, subcubeshape, subchunkshape, tsm_index=tsm_index))
+            arrays.append(self._read_tsm_file(filename, seqnr, coldesc, subcubeshape, subchunkshape, tsm_index=tsm_index, offset=position[tsm_index]))
 
             position[tsm_index] = row_index + 1
 

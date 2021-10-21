@@ -37,7 +37,7 @@ class CASAArrayWrapper:
     """
 
     def __init__(self, filename, totalshape, chunkshape, chunkoversample=None,
-                 dtype=None, itemsize=None, memmap=False):
+                 dtype=None, itemsize=None, memmap=False, offset=0):
         self._filename = filename
         self._totalshape = totalshape[::-1]
         self._chunkshape = chunkshape[::-1]
@@ -49,6 +49,7 @@ class CASAArrayWrapper:
         self._chunksize = np.product(chunkshape)
         self._itemsize = itemsize
         self._memmap = memmap
+        self._offset = offset
         if not memmap:
             if self._itemsize == 1:
                 self._array = np.unpackbits(np.fromfile(filename, dtype='uint8'), bitorder='little')
@@ -70,7 +71,7 @@ class CASAArrayWrapper:
         for dim in range(1, self.ndim):
             chunk_number = chunk_number * self._stacks[::-1][dim] + indices[dim]
 
-        offset = chunk_number * self._chunksize * self._itemsize
+        offset = chunk_number * self._chunksize * self._itemsize + self._offset * self._itemsize
 
         item_in_chunk = []
         for dim in range(self.ndim):

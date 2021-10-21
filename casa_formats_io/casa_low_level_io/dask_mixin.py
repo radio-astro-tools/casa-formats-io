@@ -25,6 +25,11 @@ class DaskColumn(da.Array):
         # overload this since Table tries to copy the array.
         return DaskColumn(self.dask, self.name, self.chunks, meta=self)
 
+    def __getitem__(self, item):
+        arr = super().__getitem__(item)
+        return DaskColumn(arr.dask, arr.name, arr.chunks, meta=arr)
+
+
 
 def dask_to_mixin(arr):
     return DaskColumn(arr.dask, arr.name, arr.chunks, meta=arr)
