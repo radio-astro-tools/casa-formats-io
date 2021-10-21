@@ -276,8 +276,8 @@ class TiledShapeStMan(TiledStMan):
             subcubeshape[-1] = (row_index + 1 - position[tsm_index])
             subchunkshape = self.tile_shapes[tsm_index]
 
-            # FIXME: Need to also offset to position[tsm_index]!!
-            arrays.append(self._read_tsm_file(filename, seqnr, coldesc, subcubeshape, subchunkshape, tsm_index=tsm_index, offset=position[tsm_index]))
+            arrays.append(self._read_tsm_file(filename, seqnr, coldesc, subcubeshape, subchunkshape, tsm_index=tsm_index,
+                                              offset=position[tsm_index] * np.product(subcubeshape[:-1])))
 
             position[tsm_index] = row_index + 1
 
