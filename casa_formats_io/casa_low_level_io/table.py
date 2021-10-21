@@ -4,6 +4,8 @@ from collections import OrderedDict
 
 import numpy as np
 
+from dask import array as da
+
 from astropy.table import Table as AstropyTable
 
 from .core import (check_type_and_version, BaseCasaObject, with_nbytes_prefix,
@@ -16,6 +18,8 @@ from .data_managers import (StandardStMan, IncrementalStMan, TiledCellStMan,
                             VariableShapeArrayList)
 
 from .record import RecordDesc
+
+from .dask_mixin import dask_to_mixin
 
 
 class ArrayColumnData(BaseCasaObject):
@@ -251,6 +255,16 @@ class TableRecord(BaseCasaObject):
         return self.values
 
 
+def ensure_mixin_columns(columns):
+    new_columns = {}
+    for colname, column in columns.items():
+        if isinstance(column, da.Array):
+            new_columns[colname] = dask_to_mixin(column)
+        else:
+            new_columns[colname] = column
+    return new_columns
+
+
 class Table(BaseCasaObject):
 
     @classmethod
@@ -341,11 +355,12 @@ class Table(BaseCasaObject):
             if isinstance(data, VariableShapeArrayList):
                 if split is None:
                     split = set()
-                split |= set([array.shape[0] for array in data])
                 last_rows[colname] = np.cumsum([array.shape[0] for array in data])
+                split |= set(np.cumsum([array.shape[0] for array in data]))
+
 
         if split is None:
-            return [AstropyTable(data=table_columns)]
+            return [AstropyTable(data=ensure_mixin_columns(table_columns))]
         else:
             # Convert to a sorted list
             split = sorted(split)
@@ -369,7 +384,7 @@ class Table(BaseCasaObject):
                     else:
                         columns_sub[colname] = data[start:end]
 
-                tables.append(AstropyTable(data=columns_sub))
+                tables.append(AstropyTable(data=ensure_mixin_columns(columns_sub)))
 
                 start = end
 
