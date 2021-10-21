@@ -258,8 +258,6 @@ class TableRecord(BaseCasaObject):
 def ensure_mixin_columns(columns):
     new_columns = {}
     for colname, column in columns.items():
-        if len(column) == 0:
-            raise Exception(f"Column {colname} is empty")
         if isinstance(column, da.Array):
             new_columns[colname] = dask_to_mixin(column)
         else:

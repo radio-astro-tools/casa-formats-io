@@ -166,7 +166,7 @@ def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
     chunksize = np.product(chunkshape)
 
     # the total shape defines the final output array shape
-    totalshape = dm.cube_shape
+    totalshape = dm.cube_shapes[0]
 
     # we expect that the total size of the array will be determined by finding
     # the number of chunks along each dimension rounded up

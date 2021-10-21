@@ -50,8 +50,8 @@ def getdminfo(filename, endian='>'):
         bucket = dminfo['SPEC']['HYPERCUBES'] = {}
         bucket = dminfo['SPEC']['HYPERCUBES']['*1'] = {}
 
-        bucket['CubeShape'] = bucket['CellShape'] = dm.cube_shape
-        bucket['TileShape'] = dm.tile_shape
+        bucket['CubeShape'] = bucket['CellShape'] = dm.cube_shapes[0]
+        bucket['TileShape'] = dm.tile_shapes[0]
         bucket['ID'] = {}
         bucket['BucketSize'] = int(dm.total_cube_size /
                                    np.product(np.ceil(bucket['CubeShape']

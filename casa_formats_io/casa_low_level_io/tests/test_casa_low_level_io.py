@@ -67,7 +67,7 @@ def test_getdminfo_large():
         magic = f.read(4)  # noqa
         lt32bit = TiledCellStMan()
         lt32bit.read_header(f)
-    assert_equal(lt32bit.cube_shape, (320, 320, 1, 1920))
+    assert_equal(lt32bit.cube_shapes[0], (320, 320, 1, 1920))
 
     filename = os.path.join(DATA, 'gt32bit.image')
     with open(os.path.join(filename, 'table.f0'), 'rb') as f_orig:
@@ -75,7 +75,7 @@ def test_getdminfo_large():
         magic = f.read(4)  # noqa
         gt32bit = TiledCellStMan()
         gt32bit.read_header(f)
-    assert_equal(gt32bit.cube_shape, (640, 640, 1, 1920))
+    assert_equal(gt32bit.cube_shapes[0], (640, 640, 1, 1920))
 
 
 @pytest.fixture
