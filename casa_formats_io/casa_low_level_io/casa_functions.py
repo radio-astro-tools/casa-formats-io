@@ -15,7 +15,8 @@ def getdminfo(filename, endian='>'):
     table = Table.read(filename, endian=endian)
 
     colset = table.column_set
-    dm = colset.data_managers[0]
+    keys = list(colset.data_managers.keys())
+    dm = colset.data_managers[keys[0]]
 
     dminfo = {}
 
@@ -72,10 +73,12 @@ def getdesc(filename, endian='>'):
 
     coldesc = table.desc.column_description
 
+    dmkey0 = list(table.column_set.data_managers.keys())[0]
+
     desc = {}
     for column in coldesc:
         desc[column.name] = {'comment': column.comment,
-                             'dataManagerGroup': table.column_set.data_managers[0].name,
+                             'dataManagerGroup': table.column_set.data_managers[dmkey0].name,
                              'dataManagerType': column.data_manager_type,
                              'keywords': column.keywords.as_dict(),
                              'maxlen': column.maxlen,
