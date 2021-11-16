@@ -144,7 +144,7 @@ def test_generic_table_read(tmp_path):
     assert pformat(actual_getdminfo) == pformat(reference_getdminfo)
 
     tnew = Table.read(filename_casa, endian='<')
-    tnew.as_astropy_tables()
+    tnew.as_astropy_table()
 
 
 def test_getdesc_floatarray():
@@ -187,7 +187,7 @@ def test_logtable(tmp_path):
 
     tnew = Table.read(logtable, endian='<')
 
-    tnew.as_astropy_tables()
+    tnew.as_astropy_table()
 
 
 @pytest.mark.parametrize('tablename', ('.',
@@ -216,7 +216,7 @@ def test_ms_tables(tablename):
         pytest.xfail()
 
     t = Table.read(table_filename, endian='<')
-    tt = t.as_astropy_tables()
+    tt = [t.as_astropy_table(data_desc_id=0), t.as_astropy_table(data_desc_id=1)]
 
     if CASATOOLS_INSTALLED:
 
@@ -272,7 +272,7 @@ def test_vector_columns(tmp_path):
     tb.close()
 
     tnew = Table.read(filename_casa, endian='<')
-    t2 = tnew.as_astropy_tables()[0]
+    t2 = tnew.as_astropy_table()
 
     assert_equal(t['short'], t2['short'])
     assert_equal(t['int'], t2['int'])
@@ -303,7 +303,7 @@ def test_casadata(table_filename):
         pytest.xfail()
 
     t = Table.read(table_filename, endian='<')
-    tt = t.as_astropy_tables()[0]
+    tt = t.as_astropy_table()
 
     if CASATOOLS_INSTALLED:
 

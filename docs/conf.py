@@ -30,7 +30,7 @@ release = '0.0'
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ['numpydoc', 'sphinx_automodapi.automodapi']
+extensions = ['numpydoc', 'sphinx_automodapi.automodapi', 'sphinx.ext.intersphinx']
 numpydoc_show_class_members = False
 
 # Add any paths that contain templates here, relative to this directory.
@@ -49,13 +49,9 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 #
 html_theme = 'alabaster'
 
-# Add any paths that contain custom static files (such as style sheets) here,
-# relative to this directory. They are copied after the builtin static files,
-# so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
-
-
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
     'numpy': ('https://numpy.org/doc/stable/', None),
     'astropy': ('https://docs.astropy.org/en/stable/', None)}
+
+nitpicky = True
