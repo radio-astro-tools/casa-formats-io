@@ -54,7 +54,7 @@ class TiledStMan(BaseCasaObject):
         # if self.nrfile != 1:
         #     raise ValueError("Expected nrfile to be 1, got {0}".format(self.nrfile))
 
-        self.max_itsm = 0
+        self.max_tsm_index = 0
 
         for itsm in range(self.nrfile):
 
@@ -65,7 +65,7 @@ class TiledStMan(BaseCasaObject):
             if not flag:
                 continue
 
-            self.max_itsm = itsm
+            self.max_tsm_index = itsm
 
             # The following two values are unknown, but are likely relevant when there
             # are more that one field in the image.
