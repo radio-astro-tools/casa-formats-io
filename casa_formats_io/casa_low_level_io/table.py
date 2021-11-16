@@ -371,6 +371,9 @@ class Table(BaseCasaObject):
                     if len(data) == 0:
                         continue
                     for row_index, array in data:
+                        # Workaround for https://github.com/dask/dask/issues/8387
+                        if len(row_index) < 32:
+                            row_index = row_index.compute()
                         matches = table_columns['DATA_DESC_ID'][row_index] == data_desc_id
                         if np.any(matches):
                             columns_sub[colname] = array[matches]
