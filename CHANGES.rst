@@ -4,7 +4,7 @@
 - Fix bug that occurred when target_chunksize was smaller than the native
   CASA chunk size. [#10]
 
-- Started implementing a generic CASA table reader. [#12, #14, #15, #22]
+- Started implementing a generic CASA table reader. [#12, #14, #15, #22, #32]
 
 0.1 (2020-11-08)
 ----------------
