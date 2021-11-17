@@ -61,6 +61,8 @@ measurement sets, you will need to also specify the ``data_desc_id=`` argument
 to :meth:`Table.read <astropy.table.Table.read>` with a valid integer
 DATA_DESC_ID value.
 
+    >>> table_3 = Table.read('my_multims.ms', format='casa-table', data_desc_id=3)
+
 Reference/API
 -------------
 
