@@ -1,6 +1,6 @@
 import numpy as np
 
-from .table import Table
+from .table import CASATable
 from .data_managers import StandardStMan, TiledCellStMan
 
 __all__ = ['getdminfo', 'getdesc']
@@ -12,7 +12,7 @@ def getdminfo(filename, endian='>'):
     with metadata about the .image file, parsed from the ``table.f0`` file.
     """
 
-    table = Table.read(filename, endian=endian)
+    table = CASATable.read(filename, endian=endian)
 
     colset = table.column_set
     dm = colset.data_managers[0]
@@ -68,7 +68,7 @@ def getdesc(filename, endian='>'):
     with metadata about the .image file, parsed from the ``table.dat`` file.
     """
 
-    table = Table.read(filename, endian=endian)
+    table = CASATable.read(filename, endian=endian)
 
     coldesc = table.desc.column_description
 

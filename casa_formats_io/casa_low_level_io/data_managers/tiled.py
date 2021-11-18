@@ -1,6 +1,9 @@
 import os
+from collections import defaultdict
 
 import numpy as np
+
+import dask.array as da
 
 from ..core import (check_type_and_version, BaseCasaObject, with_nbytes_prefix,
                     read_string, read_int32, read_int64, read_iposition,
@@ -53,7 +56,7 @@ class TiledStMan(BaseCasaObject):
 
         self.max_tsm_index = 0
 
-        for tsm_index in range(self.nrfile):
+        for itsm in range(self.nrfile):
 
             # The following flag seems to control whether or not the TSM file is
             # opened by CASA, and is probably safe to ignore here.
@@ -62,7 +65,7 @@ class TiledStMan(BaseCasaObject):
             if not flag:
                 continue
 
-            self.max_tsm_index = tsm_index
+            self.max_tsm_index = itsm
 
             # The following two values are unknown, but are likely relevant when there
             # are more that one field in the image.
@@ -82,7 +85,7 @@ class TiledStMan(BaseCasaObject):
         self.cube_shapes = []
         self.tile_shapes = []
 
-        for tsm_index in range(self.nrfile):
+        for itsm in range(self.nrfile):
 
             unknown = read_int32(f)  # 1
 
@@ -260,28 +263,38 @@ class TiledShapeStMan(TiledStMan):
         # chunkshape defines how the chunks (array subsets) are written to disk
         chunkshape = list(self.default_tile_shape)
 
-        # TODO: for now we assume that the cubes are in the right order in
-        # self.cube_index and that self.last_row_abs is monotically increasing.
-        # This assumption might actually be ok but we should check.
+        if len(self.last_row_abs.elements) == 0:
+            return VariableShapeArrayList([])
 
-        position = {}
+        tsm_indices = np.unique(self.cube_index.elements)
 
-        arrays = []
-        for tsm_index, row_index in zip(self.cube_index.elements, self.last_row_sub.elements):
+        # Start off by reading each TSM file into a dask array
+        dask_arrays = {}
+        for itsm in tsm_indices:
+            dask_arrays[itsm] = self._read_tsm_file(filename, seqnr, coldesc,
+                                                    self.cube_shapes[itsm],
+                                                    self.tile_shapes[itsm],
+                                                    tsm_index=itsm)
 
-            if tsm_index not in position:
-                position[tsm_index] = 0
+        # Next up, we construct for each of the hypercubes an array of row indices
+        # in the final table that each hypercube row corresponds to.
 
-            subcubeshape = self.cube_shapes[tsm_index]
-            subcubeshape[-1] = (row_index + 1 - position[tsm_index])
-            subchunkshape = self.tile_shapes[tsm_index]
+        # Start off by making a master index of all rows
+        index = da.arange(self.last_row_abs.elements[-1] + 1)
 
-            arrays.append(self._read_tsm_file(filename, seqnr, coldesc, subcubeshape, subchunkshape, tsm_index=tsm_index,
-                                              offset=position[tsm_index] * np.product(subcubeshape[:-1])))
+        # Construct the index for each TSM cube
+        tsm_row_index = defaultdict(list)
+        for idx in range(len(self.cube_index.elements)):
+            start = 0 if idx == 0 else self.last_row_abs.elements[idx - 1] + 1
+            end = self.last_row_abs.elements[idx] + 1
+            tsm_row_index[self.cube_index.elements[idx]].append(index[start:end])
 
-            position[tsm_index] = row_index + 1
+        # Make each row index into a single dask array
+        for itsm in tsm_row_index:
+            tsm_row_index[itsm] = da.hstack(tsm_row_index[itsm])
 
-        return VariableShapeArrayList(arrays)
+        # Return a list of (row_index, hypercube) tuples
+        return VariableShapeArrayList([(tsm_row_index[itsm], dask_arrays[itsm]) for itsm in tsm_indices])
 
 
 class TiledColumnStMan(TiledStMan):

@@ -5,13 +5,13 @@ import glob
 import pytest
 import numpy as np
 from numpy.testing import assert_equal
-from astropy.table import Table as AstropyTable
+from astropy.table import Table
 from pprint import pformat
 
 from ..data_managers import TiledCellStMan
 from ..casa_functions import getdminfo, getdesc
 from ..core import EndianAwareFileHandle
-from ..table import Table
+from ..table import CASATable
 
 try:
     from casatools import table, image
@@ -95,7 +95,7 @@ def test_generic_table_read(tmp_path):
 
     N = 120
 
-    t = AstropyTable()
+    t = Table()
     t['short'] = np.arange(N, dtype=np.int16)
     t['ushort'] = np.arange(N, dtype=np.uint16)
     t['int'] = np.arange(N, dtype=np.int32)
@@ -143,8 +143,7 @@ def test_generic_table_read(tmp_path):
 
     assert pformat(actual_getdminfo) == pformat(reference_getdminfo)
 
-    tnew = Table.read(filename_casa, endian='<')
-    tnew.as_astropy_tables()
+    tnew = Table.read(filename_casa)
 
 
 def test_getdesc_floatarray():
@@ -185,9 +184,7 @@ def test_logtable(tmp_path):
     assert pformat(actual_getdesc) == pformat(reference_getdesc)
     assert pformat(actual_getdminfo) == pformat(reference_getdminfo)
 
-    tnew = Table.read(logtable, endian='<')
-
-    tnew.as_astropy_tables()
+    Table.read(logtable)
 
 
 @pytest.mark.parametrize('tablename', ('.',
@@ -215,8 +212,8 @@ def test_ms_tables(tablename):
     if tablename == 'SYSPOWER':
         pytest.xfail()
 
-    t = Table.read(table_filename, endian='<')
-    tt = t.as_astropy_tables()
+    tt = [Table.read(table_filename, data_desc_id=0),
+          Table.read(table_filename, data_desc_id=1)]
 
     if CASATOOLS_INSTALLED:
 
@@ -253,15 +250,12 @@ def test_ms_tables(tablename):
 @pytest.mark.skipif('not CASATOOLS_INSTALLED')
 def test_vector_columns(tmp_path):
 
-    # NOTE: for now, this doesn't check that we can read the data - just
-    # the metadata about the table.
-
     filename_fits = str(tmp_path / 'vector.fits')
     filename_casa = str(tmp_path / 'vector.image')
 
     N = 120
 
-    t = AstropyTable()
+    t = Table()
     t['short'] = np.arange(N, dtype=np.int16).reshape((5, 4, 3, 2))
     t['int'] = np.arange(N, dtype=np.int32).reshape((5, 4, 3, 2))
     t['double'] = np.arange(N, dtype=np.float64).reshape((5, 4, 3, 2))
@@ -271,8 +265,7 @@ def test_vector_columns(tmp_path):
     tb.fromfits(filename_casa, filename_fits)
     tb.close()
 
-    tnew = Table.read(filename_casa, endian='<')
-    t2 = tnew.as_astropy_tables()[0]
+    t2 = Table.read(filename_casa)
 
     assert_equal(t['short'], t2['short'])
     assert_equal(t['int'], t2['int'])
@@ -302,8 +295,7 @@ def test_casadata(table_filename):
     if os.path.relpath(table_filename, datapath) in EXPECTED_FAILURES:
         pytest.xfail()
 
-    t = Table.read(table_filename, endian='<')
-    tt = t.as_astropy_tables()[0]
+    tt = Table.read(table_filename)
 
     if CASATOOLS_INSTALLED:
 
