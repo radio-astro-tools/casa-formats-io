@@ -307,7 +307,7 @@ class CASATable(BaseCasaObject):
 
         return table
 
-    def as_astropy_table(self, data_desc_id=None):
+    def as_astropy_table(self, data_desc_id=None, include_columns=None):
 
         # We now loop over columns and read the relevant data from each bucket.
 
@@ -320,6 +320,11 @@ class CASATable(BaseCasaObject):
         table_columns = OrderedDict()
 
         for colindex in range(len(coldesc)):
+
+            colname = coldesc[colindex].name
+
+            if include_columns is not None and colname not in include_columns:
+                continue
 
             # Find the data manager to use for the column as well as the
             # 'sequence number' - this is the value in e.g. table.f<seqnr>
@@ -335,8 +340,6 @@ class CASATable(BaseCasaObject):
                 if column.data.seqnr == seqnr:
                     colindex_in_dm += 1
 
-            colname = coldesc[colindex].name
-
             if hasattr(dm, 'read_column'):
                 coldata = dm.read_column(self._filename, seqnr, self.column_set.columns[colindex], coldesc[colindex], colindex_in_dm)
                 if coldata is not None:
@@ -349,6 +352,14 @@ class CASATable(BaseCasaObject):
         # as it allows us to know how to extract sub-tables with constant shapes.
 
         if 'DATA_DESC_ID' in table_columns:
+
+            # If DATA_DESC_ID is present but include_columns is used, it might
+            # actually be possible to represent the data as a single table.
+            for data in table_columns.values():
+                if isinstance(data, VariableShapeArrayList):
+                    break
+            else:
+                return AstropyTable(data=ensure_mixin_columns(table_columns))
 
             data_desc_ids = sorted(np.unique(table_columns['DATA_DESC_ID']))
 
