@@ -265,7 +265,7 @@ def ensure_mixin_columns(columns):
     return new_columns
 
 
-class Table(BaseCasaObject):
+class CASATable(BaseCasaObject):
 
     @classmethod
     def read(cls, filename, endian='<'):

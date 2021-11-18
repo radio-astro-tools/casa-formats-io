@@ -9,7 +9,7 @@ import numpy as np
 
 import dask.array
 
-from .casa_low_level_io import Table
+from .casa_low_level_io.table import CASATable
 from ._casa_chunking import _combine_chunks
 
 __all__ = ['image_to_dask']
@@ -153,7 +153,7 @@ def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
     img_fn = os.path.join(str(imagename), 'table.f0_TSM0')
 
     # load the metadata from the image table.
-    table = Table.read(str(imagename), endian='>')
+    table = CASATable.read(str(imagename), endian='>')
 
     # extract data manager
     dm = table.column_set.data_managers[0]

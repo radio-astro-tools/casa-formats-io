@@ -54,14 +54,14 @@ the ``casa_formats_io`` module, which registers the reader, then use the
 
     >>> import casa_formats_io
     >>> from astropy.table import Table
-    >>> table = Table.read('my_dataset.ms', format='casa-table')
+    >>> table = Table.read('my_dataset.ms')
 
 If the table contains a ``DATA_DESC_ID`` column, which is the case for e.g.
 measurement sets, you will need to also specify the ``data_desc_id=`` argument
 to :meth:`Table.read <astropy.table.Table.read>` with a valid integer
 DATA_DESC_ID value.
 
-    >>> table_3 = Table.read('my_multims.ms', format='casa-table', data_desc_id=3)
+    >>> table_3 = Table.read('my_multims.ms', data_desc_id=3)
 
 Reference/API
 -------------
