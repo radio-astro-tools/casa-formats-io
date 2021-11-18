@@ -307,6 +307,14 @@ class CASATable(BaseCasaObject):
 
         return table
 
+    def has_data_desc_id(self):
+        coldesc = self.desc.column_description
+        for colindex in range(len(coldesc)):
+            colname = coldesc[colindex].name
+            if colname == 'DATA_DESC_ID':
+                return True
+        return False
+
     def as_astropy_table(self, data_desc_id=None, include_columns=None):
 
         # We now loop over columns and read the relevant data from each bucket.
