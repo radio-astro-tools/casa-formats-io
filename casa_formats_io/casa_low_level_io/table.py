@@ -316,6 +316,7 @@ class CASATable(BaseCasaObject):
         return False
 
     def as_astropy_table(self, data_desc_id=None, include_columns=None):
+    def as_astropy_table(self, data_desc_id=None, include_columns=None, all_ddids=False):
 
         # We now loop over columns and read the relevant data from each bucket.
 
@@ -371,41 +372,19 @@ class CASATable(BaseCasaObject):
 
             data_desc_ids = sorted(np.unique(table_columns['DATA_DESC_ID']))
 
-            tables = []
-
             if data_desc_id is None:
                 if len(data_desc_ids) == 1:
                     data_desc_id = data_desc_ids[0]
+                    return self._read_data_descid(table_columns, data_desc_ids)
+                elif all_ddids:
+                    tables = [self._read_data_descid(table_columns, ddid)
+                              for ddid in data_desc_ids]
+                    return tables
                 else:
                     raise ValueError("There are multiple DATA_DESC_ID values present "
                                      "in the table, select the one you need with "
                                      "data_desc_id=<value>. Valid options are "
                                      + "/".join([str(x) for x in data_desc_ids]))
-
-            keep = table_columns['DATA_DESC_ID'] == data_desc_id
-
-            columns_sub = OrderedDict()
-            for colname, data in table_columns.items():
-                if isinstance(data, VariableShapeArrayList):
-                    if len(data) == 0:
-                        continue
-                    for row_index, array in data:
-                        # Workaround for https://github.com/dask/dask/issues/8387
-                        if len(row_index) < 32:
-                            row_index = row_index.compute()
-                        matches = table_columns['DATA_DESC_ID'][row_index] == data_desc_id
-                        if np.any(matches):
-                            columns_sub[colname] = array[matches]
-                            break
-                    else:
-                        columns_sub[colname] = []
-                else:
-                    columns_sub[colname] = data[keep]
-
-            table = AstropyTable(data=ensure_mixin_columns(columns_sub))
-            table.meta['DATA_DESC_ID'] = data_desc_id
-
-            return table
 
         else:
 
@@ -414,6 +393,33 @@ class CASATable(BaseCasaObject):
                     raise NotImplementedError("Can't handle tables with variable shaped columns where DATA_DESC_ID does not exist")
 
             return AstropyTable(data=ensure_mixin_columns(table_columns))
+
+    def _read_data_descid(self, table_columns, data_desc_id):
+
+        keep = table_columns['DATA_DESC_ID'] == data_desc_id
+
+        columns_sub = OrderedDict()
+        for colname, data in table_columns.items():
+            if isinstance(data, VariableShapeArrayList):
+                if len(data) == 0:
+                    continue
+                for row_index, array in data:
+                    # Workaround for https://github.com/dask/dask/issues/8387
+                    if len(row_index) < 32:
+                        row_index = row_index.compute()
+                    matches = table_columns['DATA_DESC_ID'][row_index] == data_desc_id
+                    if np.any(matches):
+                        columns_sub[colname] = array[matches]
+                        break
+                else:
+                    columns_sub[colname] = []
+            else:
+                columns_sub[colname] = data[keep]
+
+        table = AstropyTable(data=ensure_mixin_columns(columns_sub))
+        table.meta['DATA_DESC_ID'] = data_desc_id
+
+        return table
 
     @classmethod
     @with_nbytes_prefix
