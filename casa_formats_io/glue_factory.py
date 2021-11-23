@@ -5,6 +5,7 @@ import dask.array as da
 
 from glue.core import Data
 from glue.config import data_factory
+from glue.core.coordinates import AffineCoordinates
 
 from astropy.table import Table
 
@@ -64,6 +65,52 @@ def table_to_glue_data(table, label):
     return data
 
 
+def ms_table_to_glue_data(table, label, polarizations):
+
+    # For MS tables specifically we can be smarter about how we split columns
+    # as we can special case different columns.
+
+    data_shape = table['DATA'].shape
+
+    # Split UVW vector column into U, V, and W
+    table['U'] = table['UVW'][:, 0]
+    table['V'] = table['UVW'][:, 1]
+    table['W'] = table['UVW'][:, 2]
+    table.remove_column('UVW')
+
+    # Columns that have polarization dimensions can be split
+    for colname in ['FLAG', 'WEIGHT', 'SIGMA', 'DATA', 'MODEL_DATA', 'CORRECTED_DATA']:
+        if colname in table.colnames:
+            for ipol, pol in enumerate(polarizations):
+                table[colname + '_' + pol] = table[colname][..., ipol]
+            table.remove_column(colname)
+
+    # Now we are left with some 1-D and some 2-D columns, so we broadcast all
+    # the 1-D ones to match the 2-D ones.
+    for colname in table.colnames:
+        if table[colname].ndim == 1:
+            table[colname] = da.broadcast_to(table[colname], data_shape[:2][::-1]).T
+
+    # Split out complex columns into amp/phase/real/imag
+    for colname in table.colnames:
+        if table[colname].dtype.kind == 'c':
+            table[colname + '.amp'] = np.abs(table[colname])
+            table[colname + '.phase'] = da.angle(table[colname])
+            table[colname + '.real'] = da.real(table[colname])
+            table[colname + '.imag'] = da.imag(table[colname])
+            table.remove_column(colname)
+
+    kwargs = dict((c, table[c]) for c in table.colnames)
+
+    # For now just set up an identity transform but with correct axis labels
+    # to avoid confusion.
+    coords = AffineCoordinates(np.identity(3), labels=['Frequency', 'Row index'])
+
+    data = Data(label=label, coords=coords, **kwargs)
+
+    return data
+
+
 @data_factory(label='CASA Measurement Set', identifier=is_casa_table)
 def read_casa_table(filename, **kwargs):
 
@@ -79,18 +126,28 @@ def read_casa_table(filename, **kwargs):
         data_desc_ids = np.sort(np.unique(casa_table.as_astropy_table(include_columns=['DATA_DESC_ID'])['DATA_DESC_ID']))
 
         # Load in polarization and spectral window tables
-        polarization = Table.read(os.path.join(filename, 'POLARIZATION'), format='casa-table')
-        spectral_window = Table.read(os.path.join(filename, 'SPECTRAL_WINDOW'), format='casa-table')
+        table_desc = Table.read(os.path.join(filename, 'DATA_DESCRIPTION'), format='casa-table')
+        table_pol = Table.read(os.path.join(filename, 'POLARIZATION'), format='casa-table')
+        # table_spw = Table.read(os.path.join(filename, 'SPECTRAL_WINDOW'), format='casa-table')
 
         for data_desc_id in data_desc_ids:
 
+            # Extract polarizations
+            pol_id = table_desc['POLARIZATION_ID'][data_desc_id]
+            corr_type = table_pol['CORR_TYPE'][pol_id]
+            polarizations = [POLARIZATIONS[ct - 1] for ct in corr_type]
+
+            # Extract frequencies
+            # spw_id = table_desc['SPECTRAL_WINDOW_ID'][data_desc_id]
+            # chan_freq = table_spw['CHAN_FREQ'][spw_id]
+
             table = casa_table.as_astropy_table(data_desc_id=data_desc_id)
-            datasets.append(table_to_glue_data(table, label=label_prefix + f' [DATA_DESC_ID={data_desc_id}]'))
+            datasets.append(ms_table_to_glue_data(table, label_prefix + f' [DATA_DESC_ID={data_desc_id}]', polarizations))
 
     else:
 
         table = casa_table.as_astropy_table()
-        datasets.append(table_to_glue_data(table, label=label_prefix))
+        datasets.append(table_to_glue_data(table, label_prefix))
 
     return datasets
 
