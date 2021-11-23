@@ -13,6 +13,11 @@ from casa_formats_io.casa_low_level_io.table import CASATable
 __all__ = ['read_spectral_cube', 'parse_spectral_cube']
 
 
+POLARIZATIONS = ['I', 'Q', 'U', 'V',
+                 'RR', 'RL', 'LR', 'LL',
+                 'XX', 'XY', 'YX', 'YY']
+
+
 def is_casa_table(filename):
     if (isinstance(filename, str) and
             os.path.isdir(filename) and
@@ -73,7 +78,12 @@ def read_casa_table(filename, **kwargs):
         # get just that column
         data_desc_ids = np.sort(np.unique(casa_table.as_astropy_table(include_columns=['DATA_DESC_ID'])['DATA_DESC_ID']))
 
+        # Load in polarization and spectral window tables
+        polarization = Table.read(os.path.join(filename, 'POLARIZATION'), format='casa-table')
+        spectral_window = Table.read(os.path.join(filename, 'SPECTRAL_WINDOW'), format='casa-table')
+
         for data_desc_id in data_desc_ids:
+
             table = casa_table.as_astropy_table(data_desc_id=data_desc_id)
             datasets.append(table_to_glue_data(table, label=label_prefix + f' [DATA_DESC_ID={data_desc_id}]'))
 
