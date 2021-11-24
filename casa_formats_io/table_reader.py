@@ -6,7 +6,6 @@ from casa_formats_io.casa_low_level_io.table import CASATable
 
 
 def identify_casa_table(origin, *args, **kwargs):
-    print(origin, args, kwargs)
     if (isinstance(args[2], str) and
             os.path.isdir(args[2]) and
             os.path.exists(os.path.join(args[2], 'table.dat'))):
