@@ -55,8 +55,19 @@ class CASAArrayWrapper:
                 self._array = np.unpackbits(np.fromfile(filename, dtype='uint8'), bitorder='little')
             else:
                 self._array = np.fromfile(filename, dtype=np.uint8)
+        self._last_item = None
+        self._last_result = None
 
     def __getitem__(self, item):
+
+        # dask does not cache calls to __getitem__ so in some cases might call it twice with
+        # the same item - rather than try and cache multiple possible items we implement a
+        # simple caching strategy of at least ensuring that successive calls with the same
+        # input are cached (https://github.com/dask/dask/issues/8420).
+        # This is important for example for Table.__repr__ which accesses the cells
+        # one by one.
+        if item == self._last_item:
+            return self._last_result
 
         # TODO: potentially normalize item, for now assume it is a list of slice objects
 
@@ -99,7 +110,7 @@ class CASAArrayWrapper:
                                    shape=self._chunkshape,
                                    oversample=self._chunkoversample)[:self._chunksize]
 
-            return chunk.reshape(self._chunkshape[::-1], order='F').T[item_in_chunk].astype(np.bool_)
+            result = chunk.reshape(self._chunkshape[::-1], order='F').T[item_in_chunk].astype(np.bool_)
 
         else:
 
@@ -111,12 +122,18 @@ class CASAArrayWrapper:
                 data_bytes = self._array[chunk_number*self._chunksize * self._itemsize:
                                          (chunk_number + 1)*self._chunksize * self._itemsize]
 
-            return (combine_chunks(data_bytes,
-                                   self._itemsize,
-                                   shape=self._chunkshape,
-                                   oversample=self._chunkoversample)
-                    .view(self.dtype)
-                    .reshape(self._chunkshape[::-1], order='F').T[item_in_chunk])
+            result =  (combine_chunks(data_bytes,
+                                      self._itemsize,
+                                      shape=self._chunkshape,
+                                      oversample=self._chunkoversample)
+                       .view(self.dtype)
+                       .reshape(self._chunkshape[::-1], order='F').T[item_in_chunk])
+
+        self._last_item = item
+        self._last_result = result
+
+        return result
+
 
 
 def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
