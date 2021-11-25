@@ -33,21 +33,31 @@ def table_to_glue_data(table, label):
     # some columns being vector columns, nor complex numbers, so we expand
     # some of the columns here.
 
-    # Split out vector columns into single columns
-    for colname in table.colnames:
-        # Make sure we don't accidentally expand big cubes!
-        if table[colname].ndim > 1:
-            if np.product(table[colname].shape[1:]) > 100:
-                raise ValueError(f"Table {colname} is too wide to expand into single columns: {table[colname].shape}")
-        if table[colname].ndim == 2:
-            for i in range(table[colname].shape[1]):
-                table[f'{colname}[{i}]'] = table[colname][:, i]
-            table.remove_column(colname)
-        elif table[colname].ndim == 3:
-            for i in range(table[colname].shape[1]):
-                for j in range(table[colname].shape[2]):
-                    table[f'{colname}[{i},{j}]'] = table[colname][:, i, j]
-            table.remove_column(colname)
+    # Split out vector columns into single columns unless all vector columns
+    # are the same
+
+    reference_shape = table[table.colnames[0]].shape
+    for colname in table.colnames[1:]:
+        if table[colname].shape != reference_shape:
+            split = True
+            break
+    else:
+        split = False
+
+    if split:
+        for colname in table.colnames:
+            if table[colname].ndim > 1:
+                if np.product(table[colname].shape[1:]) > 100:
+                    raise ValueError(f"Table {colname} is too wide to expand into single columns: {table[colname].shape}")
+            if table[colname].ndim == 2:
+                for i in range(table[colname].shape[1]):
+                    table[f'{colname}[{i}]'] = table[colname][:, i]
+                table.remove_column(colname)
+            elif table[colname].ndim == 3:
+                for i in range(table[colname].shape[1]):
+                    for j in range(table[colname].shape[2]):
+                        table[f'{colname}[{i},{j}]'] = table[colname][:, i, j]
+                table.remove_column(colname)
 
     # Split out complex columns into amp/phase/real/imag
     for colname in table.colnames:
@@ -113,7 +123,7 @@ def ms_table_to_glue_data(table, label, polarizations):
     return data
 
 
-@data_factory(label='CASA Measurement Set', identifier=is_casa_table)
+@data_factory(label='CASA Table', identifier=is_casa_table)
 def read_casa_table(filename, **kwargs):
 
     casa_table = CASATable.read(filename)
