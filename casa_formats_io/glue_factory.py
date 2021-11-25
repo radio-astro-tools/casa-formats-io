@@ -89,7 +89,9 @@ def ms_table_to_glue_data(table, label, polarizations):
     # the 1-D ones to match the 2-D ones.
     for colname in table.colnames:
         if table[colname].ndim == 1:
-            table[colname] = da.broadcast_to(table[colname], data_shape[:2][::-1]).T
+            reshaped_data = da.broadcast_to(table[colname], data_shape[:2][::-1]).T
+            table.remove_column(colname)
+            table[colname] = reshaped_data
 
     # Split out complex columns into amp/phase/real/imag
     for colname in table.colnames:
