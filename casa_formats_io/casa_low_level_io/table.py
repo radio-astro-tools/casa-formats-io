@@ -390,13 +390,15 @@ class CASATable(BaseCasaObject):
                 tables = [self._read_data_descid(table_columns, ddid)
                           for ddid in data_desc_ids]
                 return tables
-            elif not isinstance(data_desc_id, int):
+
+            try:
+                return self._read_data_descid(table_columns, data_desc_id)
+            except Exception as ex:
                 raise ValueError("There are multiple DATA_DESC_ID values present "
                                  "in the table, select the one you need with "
                                  "data_desc_id=<value>. Valid options are "
-                                 + "/".join([str(x) for x in data_desc_ids]))
-
-            return self._read_data_descid(table_columns, data_desc_id)
+                                 + "/".join([str(x) for x in data_desc_ids])
+                                 + f"  Parent exception was: {ex}")
 
 
         else:
