@@ -316,7 +316,19 @@ class CASATable(BaseCasaObject):
         return False
 
     def as_astropy_table(self, data_desc_id=None, include_columns=None):
-    def as_astropy_table(self, data_desc_id=None, include_columns=None, all_ddids=False):
+        """
+        Parameters
+        ----------
+        data_desc_id : 'all', None, or int
+            'all' will get all of the ddids as a list of tables
+            An integer will get the specified ddid number.
+            If there is only one ddid and `data_desc_id` is None, it will return that ddid.
+            Otherwise, an exception will be raised.
+
+        Returns
+        -------
+        table or list of tables
+        """
 
         # We now loop over columns and read the relevant data from each bucket.
 
@@ -372,19 +384,20 @@ class CASATable(BaseCasaObject):
 
             data_desc_ids = sorted(np.unique(table_columns['DATA_DESC_ID']))
 
-            if data_desc_id is None:
-                if len(data_desc_ids) == 1:
-                    data_desc_id = data_desc_ids[0]
-                    return self._read_data_descid(table_columns, data_desc_ids)
-                elif all_ddids:
-                    tables = [self._read_data_descid(table_columns, ddid)
-                              for ddid in data_desc_ids]
-                    return tables
-                else:
-                    raise ValueError("There are multiple DATA_DESC_ID values present "
-                                     "in the table, select the one you need with "
-                                     "data_desc_id=<value>. Valid options are "
-                                     + "/".join([str(x) for x in data_desc_ids]))
+            if data_desc_id is None and len(data_desc_ids) == 1:
+                data_desc_id = data_desc_ids[0]
+            elif data_desc_id == 'all':
+                tables = [self._read_data_descid(table_columns, ddid)
+                          for ddid in data_desc_ids]
+                return tables
+            elif not isinstance(data_desc_id, int):
+                raise ValueError("There are multiple DATA_DESC_ID values present "
+                                 "in the table, select the one you need with "
+                                 "data_desc_id=<value>. Valid options are "
+                                 + "/".join([str(x) for x in data_desc_ids]))
+
+            return self._read_data_descid(table_columns, data_desc_id)
+
 
         else:
 
