@@ -5,6 +5,7 @@ DATA = os.path.join(os.path.dirname(__file__), '..', 'casa_low_level_io',
                     'tests', 'data')
 
 
+@pytest.mark.openfiles_ignore
 def test_simple():
     pytest.importorskip('glue')
     from glue.main import load_plugins
