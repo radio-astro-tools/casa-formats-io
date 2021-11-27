@@ -6,6 +6,8 @@
 
 - Started implementing a generic CASA table reader. [#12, #14, #15, #22, #32]
 
+- Add a glue data factory for CASA tables.
+
 0.1 (2020-11-08)
 ----------------
 
