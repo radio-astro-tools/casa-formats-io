@@ -122,12 +122,9 @@ def ms_table_to_glue_data(table, label, polarizations):
 
     return data
 
-
-# NOTE: we set the priority to -1 here to make sure the SpectralCube loader has
-# priority for spectral cubes, but this reader *can* be used to read in the raw
-# spectral cubes.
-
-@data_factory(label='CASA Table', identifier=is_casa_table, priority=-1)
+# We set the priority here to make sure that we rank higher than the default
+# astropy Table factory.
+@data_factory(label='CASA Table', identifier=is_casa_table, priority=1)
 def read_casa_table(filename, **kwargs):
 
     casa_table = CASATable.read(filename)
