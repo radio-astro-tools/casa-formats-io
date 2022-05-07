@@ -10,11 +10,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: [3.6, 3.7, 3.8, 3.9]
+        python-version: [3.8, 3.9, 3.10]
         include:
           # Build in which CASA can be installed
           - os: ubuntu-18.04
-            python-version: 3.6
+            python-version: 3.9
     steps:
     - uses: actions/checkout@v2
     - name: Set up library dependencies
