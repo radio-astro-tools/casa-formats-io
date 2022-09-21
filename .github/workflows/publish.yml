@@ -20,7 +20,8 @@ jobs:
       - name: Build wheels
         run: python -m cibuildwheel --output-dir wheelhouse
         env:
-          CIBW_BUILD: cp38-* cp39-* cp310-*
+          CIBW_SKIP: cp36-* cp37-*
+          CIBW_BUILD: cp*
           CIBW_TEST_EXTRAS: test
           CIBW_TEST_COMMAND: pytest --pyargs casa_formats_io
       - uses: actions/upload-artifact@v2
