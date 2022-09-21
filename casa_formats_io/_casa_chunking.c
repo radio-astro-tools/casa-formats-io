@@ -5,6 +5,9 @@
 #include <numpy/arrayobject.h>
 #include <numpy/npy_math.h>
 
+// https://github.com/numpy/numpy/issues/16970.
+struct _typeobject {};
+
 /* Define docstrings */
 static char module_docstring[] = "Functions to help with CASA chunking";
 static char _combine_chunks_docstring[] = "Combine multiple chunks into a single one";
