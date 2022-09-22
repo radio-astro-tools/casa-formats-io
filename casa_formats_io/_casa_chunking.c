@@ -1,8 +1,14 @@
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#define Py_LIMITED_API 0x030800f0
 
 #include <Python.h>
 #include <numpy/arrayobject.h>
 #include <numpy/npy_math.h>
+
+// https://github.com/numpy/numpy/issues/16970.
+struct _typeobject {
+  int foo;
+};
 
 /* Define docstrings */
 static char module_docstring[] = "Functions to help with CASA chunking";
