@@ -4,3 +4,6 @@ requires = ["setuptools",
             "oldest-supported-numpy",
             "wheel"]
 build-backend = 'setuptools.build_meta'
+
+[tool.cibuildwheel]
+skip = "cp36-* cp37-*"
