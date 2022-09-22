@@ -7,3 +7,10 @@ build-backend = 'setuptools.build_meta'
 
 [tool.cibuildwheel]
 skip = "cp36-* cp37-*"
+test-skip = "*-macosx_arm64 *-manylinux_aarch64"
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+
+[tool.cibuildwheel.linux]
+archs = ["auto", "aarch64"]
