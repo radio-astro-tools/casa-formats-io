@@ -1,7 +1,10 @@
-0.2 (2022-09-23)
+0.3 (unreleased)
 ----------------
 
 - Reduce default target_chunksize to 1000000. [#11]
+
+0.2 (2022-09-23)
+----------------
 
 - Fix bug that occurred when target_chunksize was smaller than the native
   CASA chunk size. [#10]
