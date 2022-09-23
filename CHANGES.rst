@@ -7,6 +7,8 @@
 - Fixed reading CASA masks with ``memmap=False`` when the array spans more
   than one dask chunk, which previously failed with a reshape error. [#70]
 
+- Reduce default target_chunksize to 1000000. [#11]
+
 0.3.0 (2024-04-17)
 ------------------
 
@@ -30,8 +32,6 @@
 
 0.2 (2022-09-23)
 ----------------
-
-- Reduce default target_chunksize to 1000000. [#11]
 
 - Fix bug that occurred when target_chunksize was smaller than the native
   CASA chunk size. [#10]
