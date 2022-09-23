@@ -1,4 +1,4 @@
-0.2 (unreleased)
+0.2 (2022-09-23)
 ----------------
 
 - Fix bug that occurred when target_chunksize was smaller than the native
