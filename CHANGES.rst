@@ -1,3 +1,8 @@
+0.3 (unreleased)
+----------------
+
+- Reduce default target_chunksize to 1000000. [#11]
+
 0.2 (2022-09-23)
 ----------------
 
