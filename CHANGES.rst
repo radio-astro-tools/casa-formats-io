@@ -1,3 +1,9 @@
+0.2.1 (unreleased)
+------------------
+
+- Remove old casa_low_level_io.py file which should have been removed when
+  the casa_formats_io.casa_low_level_io sub-package was created. [#54]
+
 0.2 (2022-09-23)
 ----------------
 
