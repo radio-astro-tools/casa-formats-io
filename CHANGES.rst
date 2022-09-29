@@ -1,4 +1,4 @@
-0.2.1 (unreleased)
+0.2.1 (2022-09-29)
 ------------------
 
 - Remove old casa_low_level_io.py file which should have been removed when
