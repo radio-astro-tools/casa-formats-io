@@ -21,8 +21,7 @@ jobs:
         - macos: py310-test
         - macos: py311-test-devdeps
 
-        - windows: py38-test-casa-oldestdeps
-        - windows: py39-test-casa
+        - windows: py38-test
         - windows: py39-test
         - windows: py310-test
         - windows: py311-test-devdeps
