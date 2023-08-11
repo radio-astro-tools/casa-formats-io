@@ -1,4 +1,5 @@
 import os
+from math import prod
 from collections import defaultdict
 
 import numpy as np
@@ -119,7 +120,7 @@ class TiledStMan(BaseCasaObject):
 
         totalshape = np.asarray(totalshape)
         chunkshape = np.asarray(chunkshape)
-        chunksize = np.product(chunkshape)
+        chunksize = prod(chunkshape)
 
         # Need to expose the following somehow
         target_chunksize = None
@@ -163,7 +164,7 @@ class TiledStMan(BaseCasaObject):
                 factors = [f for f in range(stacks[dim] + 1) if stacks[dim] % f == 0]
                 for factor in factors:
                     chunkoversample[dim] = factor
-                    if np.product(chunkoversample) * chunksize > target_chunksize:
+                    if prod(chunkoversample) * chunksize > target_chunksize:
                         chunkoversample = previous_chunkoversample
                         finished = True
                         break

@@ -1,4 +1,5 @@
 import os
+from math import prod
 
 import numpy as np
 import dask.array as da
@@ -47,7 +48,7 @@ def table_to_glue_data(table, label):
     if split:
         for colname in table.colnames:
             if table[colname].ndim > 1:
-                if np.product(table[colname].shape[1:]) > 100:
+                if prod(table[colname].shape[1:]) > 100:
                     raise ValueError(f"Table {colname} is too wide to expand into single columns: {table[colname].shape}")
             if table[colname].ndim == 2:
                 for i in range(table[colname].shape[1]):

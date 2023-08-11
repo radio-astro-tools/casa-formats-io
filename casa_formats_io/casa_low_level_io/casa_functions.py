@@ -1,3 +1,5 @@
+from math import prod
+
 import numpy as np
 
 from .table import CASATable
@@ -55,7 +57,7 @@ def getdminfo(filename, endian='>'):
         bucket['TileShape'] = dm.tile_shapes[0]
         bucket['ID'] = {}
         bucket['BucketSize'] = int(dm.total_cube_size /
-                                   np.product(np.ceil(bucket['CubeShape']
+                                   prod(np.ceil(bucket['CubeShape']
                                               / bucket['TileShape'])))
 
         dminfo['TYPE'] = 'TiledCellStMan'

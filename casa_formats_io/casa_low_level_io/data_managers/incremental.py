@@ -1,4 +1,5 @@
 import os
+from math import prod
 
 import numpy as np
 
@@ -125,7 +126,7 @@ class IncrementalStMan(BaseCasaObject):
                         subshape = []
                         for idim in range(ndim):
                             subshape.append(read_int32(fi))
-                        size = int(np.product(subshape))
+                        size = int(prod(subshape))
                         values.append(read_as_numpy_array(fi, coldesc.value_type, size, shape=subshape[::-1]))
                 if subshape:
                     values = np.vstack(values)
