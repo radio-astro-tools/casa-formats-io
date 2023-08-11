@@ -185,7 +185,10 @@ class StandardStMan(BaseCasaObject):
                                     strings = np.reshape(strings, coldesc.shape)
                                 bytes = strings
                             subdata.append(bytes)
-                    data.append(np.array(subdata, dtype=object))
+                    try:
+                        data.append(np.array(subdata))
+                    except ValueError:
+                        data.append(np.array(subdata, dtype=object))
                 else:
                     data.append(np.frombuffer(f.read(coldesc.maxlen * rows_in_bucket[bucket_id]), dtype=f'S{coldesc.maxlen}'))
             elif coldesc.value_type == 'record':
@@ -206,7 +209,10 @@ class StandardStMan(BaseCasaObject):
                             subshape.append(read_int32(fi))
                         size = int(prod(subshape))
                         values.append(read_as_numpy_array(fi, coldesc.value_type, size, shape=subshape[::-1]))
-                    data.append(np.array(values, dtype=object))
+                    try:
+                        data.append(np.array(values))
+                    except ValueError:
+                        data.append(np.array(values, dtype=object))
         if data:
             if data[0].ndim > 1:
                 return np.vstack(data)
