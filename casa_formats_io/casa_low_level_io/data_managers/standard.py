@@ -1,5 +1,6 @@
 import os
 import warnings
+from math import prod
 from io import BytesIO
 
 import numpy as np
@@ -140,7 +141,7 @@ class StandardStMan(BaseCasaObject):
                 return None
 
         shape = column.data.shape
-        nelements = int(np.product(shape))
+        nelements = int(prod(shape))
 
         data = []
 
@@ -170,7 +171,7 @@ class StandardStMan(BaseCasaObject):
                                 bytes += variable_string_buckets[next_vs_bucket_id][:length - len(bytes)]
                             if coldesc.ndim != 0:
                                 if coldesc.is_fixed_shape:
-                                    n = np.product(coldesc.shape)
+                                    n = prod(coldesc.shape)
                                     pos = 0
                                 else:
                                     n = bytes_to_int32(bytes[4:8], '>')
@@ -184,9 +185,12 @@ class StandardStMan(BaseCasaObject):
                                     strings = np.reshape(strings, coldesc.shape)
                                 bytes = strings
                             subdata.append(bytes)
-                    data.append(np.array(subdata))
+                    try:
+                        data.append(np.array(subdata))
+                    except ValueError:
+                        data.append(np.array(subdata, dtype=object))
                 else:
-                    data.append(np.fromstring(f.read(coldesc.maxlen * rows_in_bucket[bucket_id]), dtype=f'S{coldesc.maxlen}'))
+                    data.append(np.frombuffer(f.read(coldesc.maxlen * rows_in_bucket[bucket_id]), dtype=f'S{coldesc.maxlen}'))
             elif coldesc.value_type == 'record':
                 # TODO: determine how to handle this properly
                 warnings.warn(f'Skipping column {coldesc.name} with type record')
@@ -203,9 +207,12 @@ class StandardStMan(BaseCasaObject):
                         subshape = []
                         for idim in range(ndim):
                             subshape.append(read_int32(fi))
-                        size = int(np.product(subshape))
+                        size = int(prod(subshape))
                         values.append(read_as_numpy_array(fi, coldesc.value_type, size, shape=subshape[::-1]))
-                    data.append(np.array(values))
+                    try:
+                        data.append(np.array(values))
+                    except ValueError:
+                        data.append(np.array(values, dtype=object))
         if data:
             if data[0].ndim > 1:
                 return np.vstack(data)
