@@ -26,8 +26,10 @@ jobs:
         - windows: py310-test
         - windows: py311-test-devdeps
 
+        # NOTE: the tests below are disabled for now until tox-conda is compatible with tox 4
+
         # Note that adding -conda ensures that the workflow sets up
         # a conda environment, but does not change any of the behavior
         # in tox.
-        - linux: py39-test-linuxgcc-conda
-        - macos: py39-test-osxclang-conda
+        # - linux: py39-test-linuxgcc-conda
+        # - macos: py39-test-osxclang-conda
