@@ -6,7 +6,7 @@ requires = ["setuptools",
 build-backend = 'setuptools.build_meta'
 
 [tool.cibuildwheel]
-skip = "cp36-* cp37-* pp* *-musllinux*"
+skip = "cp36-* cp37-* cp312-* pp* *-musllinux*"
 test-skip = "*-macosx_arm64 *-manylinux_aarch64"
 
 [tool.cibuildwheel.macos]
