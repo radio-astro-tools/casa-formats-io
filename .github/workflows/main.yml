@@ -15,7 +15,6 @@ jobs:
         - linux: py310-test
         - linux: py311-test-devdeps
 
-        - macos: py38-test-casa-oldestdeps
         - macos: py38-test-casa
         - macos: py39-test
         - macos: py310-test
