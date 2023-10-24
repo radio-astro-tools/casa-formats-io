@@ -6,9 +6,11 @@
 #include <numpy/npy_math.h>
 
 // https://github.com/numpy/numpy/issues/16970.
-struct _typeobject {
-  int foo;
-};
+ #ifndef PYPY_VERSION
+ typedef struct _typeobject {
+    int foo;
+ };
+ #endif
 
 /* Define docstrings */
 static char module_docstring[] = "Functions to help with CASA chunking";
