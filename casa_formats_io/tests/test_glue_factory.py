@@ -5,7 +5,6 @@ DATA = os.path.join(os.path.dirname(__file__), '..', 'casa_low_level_io',
                     'tests', 'data')
 
 
-@pytest.mark.openfiles_ignore
 def test_simple_direct_factory():
     pytest.importorskip('glue')
     # This import is deliberately here to not automatically register
@@ -18,7 +17,6 @@ def test_simple_direct_factory():
     assert data[1].shape == (10, 4)
 
 
-@pytest.mark.openfiles_ignore
 def test_simple_load_data():
     pytest.importorskip('glue')
     from glue.main import load_plugins
