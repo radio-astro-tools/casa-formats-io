@@ -9,7 +9,6 @@ jobs:
       test_extras: test
       test_command: pytest --pyargs casa_formats_io
       targets: |
-        - cp*-manylinux_i686
         - cp*-manylinux_x86_64
         - cp*-manylinux_aarch64
         - pp39-manylinux_x86_64
