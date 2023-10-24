@@ -1,4 +1,4 @@
-0.2.2 (unreleased)
+0.2.2 (2023-10-24)
 ------------------
 
 - Fixed compatibility of wheels with PyPy. [#59]
