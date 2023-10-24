@@ -12,9 +12,12 @@ jobs:
         - cp*-manylinux_i686
         - cp*-manylinux_x86_64
         - cp*-manylinux_aarch64
+        - pp39-manylinux_x86_64
         - cp*-macosx_x86_64
         - cp*-macosx_arm64
+        - pp39-macosx_x86_64
         - cp*-win32
         - cp*-win_amd64
+        - pp39-win_amd64
     secrets:
       pypi_token: ${{ secrets.pypi_password }}
