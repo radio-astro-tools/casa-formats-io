@@ -17,7 +17,7 @@ to provide:
 At this time (November 2020), only reading .image datasets is supported. Reading measurement sets
 (.ms) or writing data of any kind are not yet supported.
 
-casa-formats-io supports python versions >=3.8.
+casa-formats-io supports python versions >=3.9.
 
 Using casa-formats-io
 ---------------------
