@@ -24,7 +24,7 @@ def getdminfo(filename, endian='>'):
 
     if isinstance(dm, StandardStMan):
 
-        dminfo['COLUMNS'] = np.array(sorted(col.name for col in colset.columns), '<U16')
+        dminfo['COLUMNS'] = np.array(sorted(col.name for col in colset.columns), 'U')
         dminfo['NAME'] = dm.name
         dminfo['SEQNR'] = 0
         dminfo['TYPE'] = 'StandardStMan'

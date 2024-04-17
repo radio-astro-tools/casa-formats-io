@@ -231,17 +231,17 @@ class TableRecord(BaseCasaObject):
             elif rectype == 'table':
                 self.values[name] = 'Table: ' + os.path.abspath(os.path.join(f.original_filename, read_string(f)))
             elif rectype == 'arrayint':
-                self.values[name] = read_array(f, 'int')
+                self.values[name] = read_array(f, 'int').astype('<i4')
             elif rectype == 'arrayuint':
-                self.values[name] = read_array(f, 'uint')
+                self.values[name] = read_array(f, 'uint').astype('<u4')
             elif rectype == 'arrayfloat':
-                self.values[name] = read_array(f, 'float')
+                self.values[name] = read_array(f, 'float').astype('<f4')
             elif rectype == 'arraydouble':
-                self.values[name] = read_array(f, 'double')
+                self.values[name] = read_array(f, 'double').astype('<f8')
             elif rectype == 'arraycomplex':
-                self.values[name] = read_array(f, 'complex')
+                self.values[name] = read_array(f, 'complex').astype('<c8')
             elif rectype == 'arraydcomplex':
-                self.values[name] = read_array(f, 'dcomplex')
+                self.values[name] = read_array(f, 'dcomplex').astype('<c16')
             elif rectype == 'arraystr':
                 self.values[name] = read_array(f, 'string')
             elif rectype == 'record':

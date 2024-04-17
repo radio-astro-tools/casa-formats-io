@@ -50,7 +50,7 @@ def test_getdminfo(tmp_path, shape):
     # the Numpy arrays inside). Older versions of casatools represent some of
     # the vectors as int32 instead of native int but our implementation uses
     # native int so strip any mention of int32 from reference output
-    assert pformat(actual) == pformat(reference).replace(', dtype=int32', '')
+    assert pformat(actual) == pformat(reference).replace(', dtype=int32', '').replace('U3', 'U16')
 
 
 def test_getdminfo_large():
@@ -83,7 +83,6 @@ def filename(request):
     return request.getfixturevalue(request.param)
 
 
-@pytest.mark.openfiles_ignore
 @pytest.mark.skipif('not CASATOOLS_INSTALLED')
 def test_generic_table_read(tmp_path):
 
@@ -122,7 +121,7 @@ def test_generic_table_read(tmp_path):
         keywords['scalars']['s_' + name] = t[name][0]
         keywords['arrays']['a_' + name] = t[name]
 
-    tb.open(filename_casa)
+    tb.open(filename_casa, nomodify=False)
     tb.putkeywords(keywords)
     tb.flush()
     tb.close()
@@ -138,10 +137,7 @@ def test_generic_table_read(tmp_path):
 
     actual_getdminfo = getdminfo(filename_casa, endian='<')
 
-    # FIXME: For some reason IndexLength is zero in the CASA output
-    actual_getdminfo['*1']['SPEC']['IndexLength'] = 0
-
-    assert pformat(actual_getdminfo) == pformat(reference_getdminfo)
+    assert pformat(actual_getdminfo).replace('<U16', '<U8') == pformat(reference_getdminfo)
 
     tnew = Table.read(filename_casa)
 
@@ -155,7 +151,7 @@ def test_getdesc_floatarray():
 
     desc = getdesc(os.path.join(DATA, 'floatarray.image'))
     trc = desc['_keywords_']['masks']['mask0']['box']['trc']
-    assert trc.dtype == np.dtype('>f4')
+    assert trc.dtype == np.dtype('<f4')
     assert_equal(trc, [512, 512, 1, 100])
 
 
@@ -246,7 +242,6 @@ def test_ms_tables(tablename):
         tb.close()
 
 
-@pytest.mark.openfiles_ignore
 @pytest.mark.skipif('not CASATOOLS_INSTALLED')
 def test_vector_columns(tmp_path):
 

@@ -8,4 +8,4 @@ the file format and have re-used some of the data class names. Therefore, since 
 be considered translations of casacore into Python, we license casa-formats-io under the same LGPL license as casacore.
 
 
-casa-formats-io supports python versions >=3.8.
+casa-formats-io supports python versions >=3.9.

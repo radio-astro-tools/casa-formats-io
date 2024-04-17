@@ -9,21 +9,20 @@ jobs:
     uses: OpenAstronomy/github-actions-workflows/.github/workflows/tox.yml@v1
     with:
       envs: |
-        - linux: py38-test-casa-oldestdeps
-        - linux: py38-test-casa
-        - linux: py39-test
-        - linux: py310-test
-        - linux: py311-test-devdeps
+        - linux: py39-test-oldestdeps
+        - linux: py310-test-casa
+        - linux: py311-test
+        - linux: py312-test-devdeps
 
-        - macos: py38-test-casa
         - macos: py39-test
-        - macos: py310-test
-        - macos: py311-test-devdeps
+        - macos: py310-test-casa
+        - macos: py311-test
+        - macos: py312-test-devdeps
 
-        - windows: py38-test
         - windows: py39-test
         - windows: py310-test
-        - windows: py311-test-devdeps
+        - windows: py311-test
+        - windows: py312-test-devdeps
 
         # NOTE: the tests below are disabled for now until tox-conda is compatible with tox 4
 
