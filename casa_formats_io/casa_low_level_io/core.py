@@ -158,7 +158,7 @@ ARRAY_ITEM_READERS = {
     'float': ('float', read_float32, np.float32),
     'double': ('double', read_float64, np.float64),
     'dcomplex': ('void', read_complex128, np.complex128),
-    'string': ('String', read_string, '<U16'),
+    'string': ('String', read_string, 'U'),
     'int': ('Int', read_int32, int),
     'uint': ('uInt', read_int32, int)
 }
@@ -172,7 +172,7 @@ TO_DTYPE['float'] = 'f4'
 TO_DTYPE['int'] = 'i4'
 TO_DTYPE['uint'] = 'u4'
 TO_DTYPE['short'] = 'i2'
-TO_DTYPE['string'] = '<U16'
+TO_DTYPE['string'] = 'U'
 TO_DTYPE['bool'] = 'bool'
 TO_DTYPE['record'] = 'O'
 
@@ -192,10 +192,6 @@ def read_as_numpy_array(f, value_type, nelem, shape=None, length_modifier=0):
     if value_type == 'string':
         array = np.array([read_string(f, length_modifier=length_modifier)
                           for i in range(nelem)])
-        if nelem > 0:
-            # HACK: only needed for getdesc comparisons
-            if max([len(s) for s in array]) < 16:
-                array = array.astype('<U16')
     elif value_type == 'bool':
         length = int(np.ceil(nelem / 8)) * 8
         array = np.unpackbits(np.frombuffer(f.read(length), dtype='uint8'),
