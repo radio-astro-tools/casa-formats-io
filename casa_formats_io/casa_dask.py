@@ -2,6 +2,7 @@
 
 from __future__ import print_function, absolute_import, division
 
+from math import prod
 import os
 from math import ceil
 import uuid
@@ -46,7 +47,7 @@ class CASAArrayWrapper:
         self.dtype = dtype
         self.ndim = len(self.shape)
         self._stacks = np.ceil(np.array(totalshape) / np.array(chunkshape)).astype(int)
-        self._chunksize = np.product(chunkshape)
+        self._chunksize = prod(chunkshape)
         self._itemsize = itemsize
         self._memmap = memmap
         self._offset = offset
@@ -97,7 +98,7 @@ class CASAArrayWrapper:
         if self._itemsize == 1:
 
             if self._memmap:
-                n_native = np.product(self._chunkoversample)
+                n_native = prod(self._chunkoversample)
                 rounded_up_chunksize = ceil(self._chunksize / n_native / 8) * n_native
                 offset = offset // self._chunksize * rounded_up_chunksize
                 array_uint8 = np.fromfile(self._filename, dtype=np.uint8,
@@ -180,14 +181,14 @@ def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
 
     # chunkshape defines how the chunks (array subsets) are written to disk
     chunkshape = tuple(dm.default_tile_shape)
-    chunksize = np.product(chunkshape)
+    chunksize = prod(chunkshape)
 
     # the total shape defines the final output array shape
     totalshape = dm.cube_shapes[0]
 
     # we expect that the total size of the array will be determined by finding
     # the number of chunks along each dimension rounded up
-    totalsize = np.product(np.ceil(totalshape / chunkshape)) * chunksize
+    totalsize = prod(np.ceil(totalshape / chunkshape)) * chunksize
 
     # the file size helps us figure out what the dtype of the array is
     filesize = os.stat(img_fn).st_size
@@ -195,7 +196,7 @@ def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
     # the ratio between these tells you how many chunks must be combined
     # to create a final stack
     stacks = np.ceil(totalshape / chunkshape).astype(int)
-    nchunks = int(np.product(stacks))
+    nchunks = int(prod(stacks))
 
     # check that the file size is as expected and determine the data dtype
     if mask:
@@ -247,7 +248,7 @@ def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
             factors = [f for f in range(stacks[dim] + 1) if stacks[dim] % f == 0]
             for factor in factors:
                 chunkoversample[dim] = factor
-                if np.product(chunkoversample) * chunksize > target_chunksize:
+                if prod(chunkoversample) * chunksize > target_chunksize:
                     chunkoversample = previous_chunkoversample
                     finished = True
                     break
