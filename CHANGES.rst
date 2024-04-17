@@ -1,3 +1,8 @@
+0.3.0 (2024-04-17)
+------------------
+
+- Bump minimum required version of Python to 3.9 and fix test suite with recent versions of casatools. [#62]
+
 0.2.3 (2024-04-16)
 ------------------
 
