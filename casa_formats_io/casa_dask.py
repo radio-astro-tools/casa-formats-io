@@ -232,7 +232,7 @@ def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
     # and target chunk size.
 
     if target_chunksize is None:
-        target_chunksize = 1000000
+        target_chunksize = 10000000
 
     if chunksize < target_chunksize:
 
