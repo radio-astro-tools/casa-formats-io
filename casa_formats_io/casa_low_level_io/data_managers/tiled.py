@@ -161,7 +161,7 @@ class TiledStMan(BaseCasaObject):
 
             finished = False
             for dim in range(len(chunkshape)):
-                factors = [f for f in range(stacks[dim] + 1) if stacks[dim] % f == 0]
+                factors = [f for f in range(1, stacks[dim] + 1) if stacks[dim] % f == 0]
                 for factor in factors:
                     chunkoversample[dim] = factor
                     if prod(chunkoversample) * chunksize > target_chunksize:

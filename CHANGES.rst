@@ -4,6 +4,9 @@
 - Fixed ``read_int32`` to return a native Python int rather than a numpy
   scalar. [#66]
 
+- Fixed reading CASA masks with ``memmap=False`` when the array spans more
+  than one dask chunk, which previously failed with a reshape error. [#70]
+
 0.3.0 (2024-04-17)
 ------------------
 
