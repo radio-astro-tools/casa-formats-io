@@ -9,6 +9,8 @@
 
 - Reduce default target_chunksize to 1000000. [#11]
 
+- Added tests for the rules used to group CASA tiles into dask chunks. [#71]
+
 0.3.0 (2024-04-17)
 ------------------
 
