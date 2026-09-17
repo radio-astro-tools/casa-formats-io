@@ -97,15 +97,24 @@ class CASAArrayWrapper:
 
         if self._itemsize == 1:
 
+            # Boolean values are bit-packed on disk, and each *native* CASA
+            # tile is padded out to a whole number of bytes. A chunk made up of
+            # n_native tiles therefore occupies n_native * ceil(native / 8)
+            # bytes, which is not the same as self._chunksize // 8 whenever the
+            # native chunk size is not a multiple of 8.
+            n_native = prod(self._chunkoversample)
+            rounded_up_chunksize = ceil(self._chunksize / n_native / 8) * n_native
+            byte_offset = offset // self._chunksize * rounded_up_chunksize
+
             if self._memmap:
-                n_native = prod(self._chunkoversample)
-                rounded_up_chunksize = ceil(self._chunksize / n_native / 8) * n_native
-                offset = offset // self._chunksize * rounded_up_chunksize
                 array_uint8 = np.fromfile(self._filename, dtype=np.uint8,
-                                          offset=offset, count=rounded_up_chunksize)
+                                          offset=byte_offset, count=rounded_up_chunksize)
                 array_bits = np.unpackbits(array_uint8, bitorder='little')
             else:
-                array_bits = self._array[offset * 8: (offset + self._chunksize) * 8]
+                # self._array is the whole file already unpacked to bits, so
+                # byte positions have to be scaled up by 8 to index into it.
+                array_bits = self._array[byte_offset * 8:
+                                         (byte_offset + rounded_up_chunksize) * 8]
 
             chunk = combine_chunks(array_bits, 1,
                                    shape=self._chunkshape,
@@ -245,7 +254,7 @@ def image_to_dask(imagename, memmap=True, mask=False, target_chunksize=None):
 
         finished = False
         for dim in range(len(chunkshape)):
-            factors = [f for f in range(stacks[dim] + 1) if stacks[dim] % f == 0]
+            factors = [f for f in range(1, stacks[dim] + 1) if stacks[dim] % f == 0]
             for factor in factors:
                 chunkoversample[dim] = factor
                 if prod(chunkoversample) * chunksize > target_chunksize:

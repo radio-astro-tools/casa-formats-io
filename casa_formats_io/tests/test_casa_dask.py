@@ -148,3 +148,36 @@ def test_target_chunksize():
 
     array3 = image_to_dask('large.image', target_chunksize=1000)
     assert array3.chunksize == (32, 32, 32)
+
+
+# The second shape here is chosen so that the native CASA tile size is not a
+# multiple of 8, which exercises the padding of bit-packed masks.
+@pytest.mark.skipif(not CASA_INSTALLED, reason='CASA tests must be run in a CASA environment.')
+@pytest.mark.parametrize(('memmap', 'shape'),
+                         list(product([False, True], [(129, 128, 130), (127, 337, 109)])))
+def test_multiple_chunks(tmpdir, memmap, shape):
+
+    # Regression test for a bug where reading a mask spread over more than one
+    # dask chunk returned an empty array, because the offset into the
+    # bit-unpacked array was computed in elements rather than in bytes. Any
+    # target_chunksize small enough to give more than one chunk triggered it.
+
+    reference = np.random.random(shape).astype(np.float32)
+    reference[np.isclose(reference, 0.5)] += 0.05
+
+    os.chdir(tmpdir.strpath)
+
+    ia = image()
+    ia.fromarray('chunked.image', pixels=reference.T, log=False)
+    ia.calcmask(mask='chunked.image>0.5')
+    ia.close()
+
+    for target_chunksize in (1000, 50000, 500000, 5000000):
+
+        array = image_to_dask('chunked.image', memmap=memmap,
+                              target_chunksize=target_chunksize)
+        assert_allclose(array, reference)
+
+        mask = image_to_dask('chunked.image', mask=True, memmap=memmap,
+                             target_chunksize=target_chunksize)
+        assert_allclose(mask, reference > 0.5)
