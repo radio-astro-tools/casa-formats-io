@@ -2,12 +2,14 @@ from __future__ import print_function, absolute_import, division
 
 import os
 from itertools import product
+from math import ceil, prod
 
 import pytest
 import numpy as np
 from numpy.testing import assert_allclose
 
 from ..casa_dask import image_to_dask
+from ..casa_low_level_io.table import CASATable
 
 try:
     from casatools import image
@@ -151,6 +153,57 @@ def test_target_chunksize():
 
     array4 = image_to_dask('large.image', target_chunksize=1000000000)
     assert array4.chunksize == (256, 256, 256)
+
+
+# Adds a 4D image with one Stokes plane to SHAPES.
+@pytest.mark.skipif(not CASA_INSTALLED, reason='CASA tests must be run in a CASA environment.')
+@pytest.mark.parametrize('shape', SHAPES + [(50, 1, 120, 130)])
+def test_target_chunksize_rules(tmpdir, shape):
+
+    # Check the rules for grouping native CASA tiles into dask chunks over a
+    # range of target chunk sizes, rather than specific chunk shapes.
+
+    os.chdir(tmpdir.strpath)
+
+    ia = image()
+    ia.fromarray('rules.image', pixels=np.zeros(shape, dtype=np.float32).T, log=False)
+    ia.close()
+
+    # Shapes from here on are in CASA order (x first).
+    dm = CASATable.read('rules.image', endian='>').column_set.data_managers[0]
+    tileshape = [int(x) for x in dm.default_tile_shape]
+    stacks = [ceil(t / c) for t, c in zip(shape[::-1], tileshape)]
+    tilesize = prod(tileshape)
+
+    for target_chunksize in (1, 1000, 30000, 10 ** 5, 10 ** 6, 10 ** 7, 10 ** 9):
+
+        array = image_to_dask('rules.image', target_chunksize=target_chunksize)
+
+        # The first chunk along an axis is only trimmed below a whole chunk when
+        # all tiles along that axis are grouped, so rounding up recovers the
+        # number of tiles per chunk either way.
+        oversample = [ceil(c[0] / t) for c, t in zip(array.chunks[::-1], tileshape)]
+        chunksize = prod(oversample) * tilesize
+
+        # Chunks are whole tiles, and divide the tiles along each axis evenly.
+        assert all(n % o == 0 for o, n in zip(oversample, stacks)), target_chunksize
+
+        # Chunks never exceed the target, unless a single tile already does.
+        assert chunksize <= max(target_chunksize, tilesize), target_chunksize
+
+        # Tiles are only grouped along an axis once all earlier axes are
+        # complete, so chunks stay contiguous on disk.
+        for dim, o in enumerate(oversample):
+            if o > 1:
+                assert oversample[:dim] == stacks[:dim], target_chunksize
+
+        # Chunks are as large as allowed: growing the first incomplete axis to
+        # its next factor would exceed the target.
+        for o, n in zip(oversample, stacks):
+            if o < n:
+                next_factor = min(f for f in range(o + 1, n + 1) if n % f == 0)
+                assert chunksize // o * next_factor > target_chunksize, target_chunksize
+                break
 
 
 # The second shape here is chosen so that the native CASA tile size is not a
