@@ -1,4 +1,4 @@
-0.3.1 (unreleased)
+0.3.1 (2026-10-01)
 ------------------
 
 - Fixed ``read_int32`` to return a native Python int rather than a numpy
@@ -8,6 +8,9 @@
   than one dask chunk, which previously failed with a reshape error. [#70]
 
 - Reduce default target_chunksize to 1000000. [#11]
+
+- Wheels are now built on ``manylinux_2_28``; PyPy 3.9 wheels are no longer
+  built and free-threaded wheels are skipped. [#66]
 
 - Install nightly numpy, pyerfa and astropy in ``devdeps`` CI jobs. [#72]
 
