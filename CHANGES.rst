@@ -9,6 +9,8 @@
 
 - Reduce default target_chunksize to 1000000. [#11]
 
+- Install nightly numpy, pyerfa and astropy in ``devdeps`` CI jobs. [#72]
+
 0.3.0 (2024-04-17)
 ------------------
 
